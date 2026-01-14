@@ -8,6 +8,7 @@ import (
 	"github.com/bytebase/parser/mongodb"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // execute parses and executes a MongoDB shell statement.
@@ -77,7 +78,21 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 		filter = bson.D{}
 	}
 
-	cursor, err := collection.Find(ctx, filter)
+	opts := options.Find()
+	if op.sort != nil {
+		opts.SetSort(op.sort)
+	}
+	if op.limit != nil {
+		opts.SetLimit(*op.limit)
+	}
+	if op.skip != nil {
+		opts.SetSkip(*op.skip)
+	}
+	if op.projection != nil {
+		opts.SetProjection(op.projection)
+	}
+
+	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("find failed: %w", err)
 	}
