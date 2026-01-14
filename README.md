@@ -4,16 +4,21 @@ Go library for parsing and executing MongoDB shell syntax using the native Mongo
 
 ## Overview
 
-gomongo parses MongoDB shell commands (e.g., `db.users.find({ age: { $gt: 25 } })`) and executes them using the Go MongoDB driver, eliminating the need for external mongosh CLI.
+gomongo parses MongoDB shell commands (e.g., `db.users.find()`) and executes them using the Go MongoDB driver, eliminating the need for external mongosh CLI.
 
-## Features
+## Status
 
-- Parse MongoDB shell syntax using ANTLR-based parser
-- Execute queries via native Go MongoDB driver
-- Support for common read operations (`find`, `findOne`)
-- Support for cursor modifiers (`.sort()`, `.limit()`, `.skip()`, `.projection()`)
-- Support for helper functions (`ObjectId()`, `ISODate()`, `UUID()`, etc.)
-- Output results in Extended JSON (Relaxed) format
+**MVP v0.1.0** - Basic functionality implemented:
+
+| Feature | Status |
+|---------|--------|
+| `find()` without filter | Supported |
+| `find()` with filter | Parsed but filter ignored (returns all documents) |
+| `findOne()` | Not yet supported |
+| Cursor modifiers (sort, limit, skip, projection) | Parsed but ignored |
+| Helper functions (ObjectId, ISODate, etc.) | Not yet supported |
+| Shell commands (show dbs, show collections) | Not yet supported |
+| Collection access (dot, bracket, getCollection) | Supported |
 
 ## Installation
 
@@ -48,7 +53,7 @@ func main() {
 
     // Execute MongoDB shell command
     ctx := context.Background()
-    result, err := gc.Execute(ctx, "mydb", `db.users.find({ age: { $gt: 25 } }).sort({ name: 1 }).limit(10)`)
+    result, err := gc.Execute(ctx, "mydb", `db.users.find()`)
     if err != nil {
         panic(err)
     }
@@ -60,32 +65,15 @@ func main() {
 }
 ```
 
-## Supported Operations
+## Supported Operations (MVP)
 
-| Category | Operation | Example |
-|----------|-----------|---------|
-| **Read** | `find()` | `db.users.find({ age: { $gt: 25 } })` |
-| | `findOne()` | `db.users.findOne({ _id: ObjectId('...') })` |
-| **Cursor Modifiers** | `.sort()` | `.sort({ age: -1 })` |
-| | `.limit()` | `.limit(10)` |
-| | `.skip()` | `.skip(20)` |
-| | `.projection()` | `.projection({ name: 1, age: 1 })` |
-| **Utility** | `show dbs` | `show dbs` |
-| | `show collections` | `show collections` |
-| **Collection Access** | dot notation | `db.users` |
-| | bracket notation | `db["user-logs"]` |
-| | getCollection | `db.getCollection("users")` |
-
-## Helper Functions
-
-| Helper | Syntax | Example |
-|--------|--------|---------|
-| `ObjectId()` | `ObjectId("hex")` | `ObjectId("507f1f77bcf86cd799439011")` |
-| `ISODate()` | `ISODate("iso-string")` | `ISODate("2024-01-01T00:00:00Z")` |
-| `UUID()` | `UUID("uuid-string")` | `UUID("550e8400-e29b-41d4-a716-446655440000")` |
-| `NumberLong()` | `NumberLong(n)` | `NumberLong(123)` |
-| `NumberInt()` | `NumberInt(n)` | `NumberInt(42)` |
-| `NumberDecimal()` | `NumberDecimal("n")` | `NumberDecimal("123.45")` |
+| Category | Operation | Status |
+|----------|-----------|--------|
+| **Read** | `find()` | Supported (no filter) |
+| | `findOne()` | Not yet supported |
+| **Collection Access** | dot notation | Supported (`db.users`) |
+| | bracket notation | Supported (`db["user-logs"]`) |
+| | getCollection | Supported (`db.getCollection("users")`) |
 
 ## Output Format
 
@@ -99,6 +87,14 @@ Results are returned in Extended JSON (Relaxed) format:
   "createdAt": {"$date": "2024-01-01T00:00:00Z"}
 }
 ```
+
+## Roadmap
+
+Future versions will add:
+- Filter support for `find()` and `findOne()`
+- Cursor modifiers (sort, limit, skip, projection)
+- Helper functions (ObjectId, ISODate, UUID, NumberLong, etc.)
+- Shell commands (show dbs, show collections)
 
 ## License
 
