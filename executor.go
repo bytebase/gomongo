@@ -72,8 +72,10 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 func executeFind(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
 	collection := client.Database(database).Collection(op.collection)
 
-	// MVP: use empty filter
-	filter := bson.D{}
+	filter := op.filter
+	if filter == nil {
+		filter = bson.D{}
+	}
 
 	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
