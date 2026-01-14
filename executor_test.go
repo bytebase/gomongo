@@ -124,6 +124,92 @@ func TestUnsupportedOperation(t *testing.T) {
 	require.Equal(t, "findOne", unsupportedErr.Operation)
 }
 
+func TestFindWithFilter(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "age": 30, "active": true},
+		bson.M{"name": "bob", "age": 25, "active": false},
+		bson.M{"name": "carol", "age": 35, "active": true},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name          string
+		statement     string
+		expectedCount int
+		checkResult   func(t *testing.T, rows []string)
+	}{
+		{
+			name:          "filter by string",
+			statement:     `db.users.find({ name: "alice" })`,
+			expectedCount: 1,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"alice"`)
+			},
+		},
+		{
+			name:          "filter by number",
+			statement:     `db.users.find({ age: 25 })`,
+			expectedCount: 1,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"bob"`)
+			},
+		},
+		{
+			name:          "filter by boolean",
+			statement:     `db.users.find({ active: true })`,
+			expectedCount: 2,
+		},
+		{
+			name:          "filter with $gt operator",
+			statement:     `db.users.find({ age: { $gt: 28 } })`,
+			expectedCount: 2,
+		},
+		{
+			name:          "filter with $lte operator",
+			statement:     `db.users.find({ age: { $lte: 25 } })`,
+			expectedCount: 1,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"bob"`)
+			},
+		},
+		{
+			name:          "filter with multiple conditions",
+			statement:     `db.users.find({ active: true, age: { $gte: 30 } })`,
+			expectedCount: 2,
+		},
+		{
+			name:          "filter with $in operator",
+			statement:     `db.users.find({ name: { $in: ["alice", "bob"] } })`,
+			expectedCount: 2,
+		},
+		{
+			name:          "filter with no matches",
+			statement:     `db.users.find({ name: "nobody" })`,
+			expectedCount: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, tc.expectedCount, result.RowCount)
+			if tc.checkResult != nil && result.RowCount > 0 {
+				tc.checkResult(t, result.Rows)
+			}
+		})
+	}
+}
+
 func TestCollectionAccessPatterns(t *testing.T) {
 	client, cleanup := setupTestContainer(t)
 	defer cleanup()
