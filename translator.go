@@ -22,6 +22,11 @@ type mongoOperation struct {
 	opType     operationType
 	collection string
 	filter     bson.D
+	// Read operation options (find, findOne)
+	sort       bson.D
+	limit      *int64
+	skip       *int64
+	projection bson.D
 }
 
 // mongoShellVisitor extracts operations from a parse tree.
@@ -164,6 +169,86 @@ func (v *mongoShellVisitor) extractFindFilter(ctx mongodb.IFindMethodContext) {
 	v.operation.filter = filter
 }
 
+func (v *mongoShellVisitor) extractSort(ctx mongodb.ISortMethodContext) {
+	sm, ok := ctx.(*mongodb.SortMethodContext)
+	if !ok {
+		return
+	}
+
+	doc := sm.Document()
+	if doc == nil {
+		v.err = fmt.Errorf("sort() requires a document argument")
+		return
+	}
+
+	sort, err := convertDocument(doc)
+	if err != nil {
+		v.err = fmt.Errorf("invalid sort: %w", err)
+		return
+	}
+	v.operation.sort = sort
+}
+
+func (v *mongoShellVisitor) extractLimit(ctx mongodb.ILimitMethodContext) {
+	lm, ok := ctx.(*mongodb.LimitMethodContext)
+	if !ok {
+		return
+	}
+
+	numNode := lm.NUMBER()
+	if numNode == nil {
+		v.err = fmt.Errorf("limit() requires a number argument")
+		return
+	}
+
+	limit, err := strconv.ParseInt(numNode.GetText(), 10, 64)
+	if err != nil {
+		v.err = fmt.Errorf("invalid limit: %w", err)
+		return
+	}
+	v.operation.limit = &limit
+}
+
+func (v *mongoShellVisitor) extractSkip(ctx mongodb.ISkipMethodContext) {
+	sm, ok := ctx.(*mongodb.SkipMethodContext)
+	if !ok {
+		return
+	}
+
+	numNode := sm.NUMBER()
+	if numNode == nil {
+		v.err = fmt.Errorf("skip() requires a number argument")
+		return
+	}
+
+	skip, err := strconv.ParseInt(numNode.GetText(), 10, 64)
+	if err != nil {
+		v.err = fmt.Errorf("invalid skip: %w", err)
+		return
+	}
+	v.operation.skip = &skip
+}
+
+func (v *mongoShellVisitor) extractProjection(ctx mongodb.IProjectionMethodContext) {
+	pm, ok := ctx.(*mongodb.ProjectionMethodContext)
+	if !ok {
+		return
+	}
+
+	doc := pm.Document()
+	if doc == nil {
+		v.err = fmt.Errorf("projection() requires a document argument")
+		return
+	}
+
+	projection, err := convertDocument(doc)
+	if err != nil {
+		v.err = fmt.Errorf("invalid projection: %w", err)
+		return
+	}
+	v.operation.projection = projection
+}
+
 func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	mc, ok := ctx.(*mongodb.MethodCallContext)
 	if !ok {
@@ -179,13 +264,13 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 			Hint:      "not yet supported",
 		}
 	} else if mc.SortMethod() != nil {
-		// MVP: ignore sort
+		v.extractSort(mc.SortMethod())
 	} else if mc.LimitMethod() != nil {
-		// MVP: ignore limit
+		v.extractLimit(mc.LimitMethod())
 	} else if mc.SkipMethod() != nil {
-		// MVP: ignore skip
+		v.extractSkip(mc.SkipMethod())
 	} else if mc.ProjectionMethod() != nil {
-		// MVP: ignore projection
+		v.extractProjection(mc.ProjectionMethod())
 	} else if gm := mc.GenericMethod(); gm != nil {
 		methodName := gm.Identifier().GetText()
 		v.err = &UnsupportedOperationError{

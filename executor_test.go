@@ -210,6 +210,144 @@ func TestFindWithFilter(t *testing.T) {
 	}
 }
 
+func TestFindWithCursorModifications(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "apple", "price": 1, "category": "fruit"},
+		bson.M{"name": "banana", "price": 2, "category": "fruit"},
+		bson.M{"name": "carrot", "price": 3, "category": "vegetable"},
+		bson.M{"name": "date", "price": 4, "category": "fruit"},
+		bson.M{"name": "eggplant", "price": 5, "category": "vegetable"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name          string
+		statement     string
+		expectedCount int
+		checkResult   func(t *testing.T, rows []string)
+	}{
+		{
+			name:          "sort ascending",
+			statement:     `db.items.find().sort({ price: 1 })`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"apple"`)
+				require.Contains(t, rows[4], `"eggplant"`)
+			},
+		},
+		{
+			name:          "sort descending",
+			statement:     `db.items.find().sort({ price: -1 })`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"eggplant"`)
+				require.Contains(t, rows[4], `"apple"`)
+			},
+		},
+		{
+			name:          "limit",
+			statement:     `db.items.find().limit(2)`,
+			expectedCount: 2,
+		},
+		{
+			name:          "skip",
+			statement:     `db.items.find().sort({ price: 1 }).skip(2)`,
+			expectedCount: 3,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"carrot"`)
+			},
+		},
+		{
+			name:          "sort and limit",
+			statement:     `db.items.find().sort({ price: -1 }).limit(3)`,
+			expectedCount: 3,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"eggplant"`)
+				require.Contains(t, rows[2], `"carrot"`)
+			},
+		},
+		{
+			name:          "skip and limit",
+			statement:     `db.items.find().sort({ price: 1 }).skip(1).limit(2)`,
+			expectedCount: 2,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"banana"`)
+				require.Contains(t, rows[1], `"carrot"`)
+			},
+		},
+		{
+			name:          "projection include",
+			statement:     `db.items.find().projection({ name: 1 })`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"name"`)
+				require.Contains(t, rows[0], `"_id"`)
+				require.NotContains(t, rows[0], `"price"`)
+				require.NotContains(t, rows[0], `"category"`)
+			},
+		},
+		{
+			name:          "projection exclude",
+			statement:     `db.items.find().projection({ _id: 0, category: 0 })`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"name"`)
+				require.Contains(t, rows[0], `"price"`)
+				require.NotContains(t, rows[0], `"_id"`)
+				require.NotContains(t, rows[0], `"category"`)
+			},
+		},
+		{
+			name:          "filter with sort and limit",
+			statement:     `db.items.find({ category: "fruit" }).sort({ price: -1 }).limit(2)`,
+			expectedCount: 2,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"date"`)
+				require.Contains(t, rows[1], `"banana"`)
+			},
+		},
+		{
+			name:          "all modifiers combined",
+			statement:     `db.items.find({ category: "fruit" }).sort({ price: 1 }).skip(1).limit(2).projection({ name: 1, price: 1, _id: 0 })`,
+			expectedCount: 2,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"banana"`)
+				require.Contains(t, rows[1], `"date"`)
+				require.NotContains(t, rows[0], `"_id"`)
+				require.NotContains(t, rows[0], `"category"`)
+			},
+		},
+		{
+			name:          "method chain order: limit before sort",
+			statement:     `db.items.find().limit(3).sort({ price: -1 })`,
+			expectedCount: 3,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"eggplant"`)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, tc.expectedCount, result.RowCount)
+			if tc.checkResult != nil && result.RowCount > 0 {
+				tc.checkResult(t, result.Rows)
+			}
+		})
+	}
+}
+
 func TestCollectionAccessPatterns(t *testing.T) {
 	client, cleanup := setupTestContainer(t)
 	defer cleanup()
