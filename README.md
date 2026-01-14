@@ -12,11 +12,10 @@ gomongo parses MongoDB shell commands (e.g., `db.users.find()`) and executes the
 
 | Feature | Status |
 |---------|--------|
-| `find()` without filter | Supported |
-| `find()` with filter | Parsed but filter ignored (returns all documents) |
+| `find()` with filter | Supported |
 | `findOne()` | Not yet supported |
 | Cursor modifiers (sort, limit, skip, projection) | Parsed but ignored |
-| Helper functions (ObjectId, ISODate, etc.) | Not yet supported |
+| Helper functions (ObjectId, ISODate, UUID, etc.) | Supported |
 | Shell commands (show dbs, show collections) | Not yet supported |
 | Collection access (dot, bracket, getCollection) | Supported |
 
@@ -69,11 +68,44 @@ func main() {
 
 | Category | Operation | Status |
 |----------|-----------|--------|
-| **Read** | `find()` | Supported (no filter) |
+| **Read** | `find()` | Supported (with filter) |
 | | `findOne()` | Not yet supported |
 | **Collection Access** | dot notation | Supported (`db.users`) |
 | | bracket notation | Supported (`db["user-logs"]`) |
 | | getCollection | Supported (`db.getCollection("users")`) |
+
+## Supported Filter Syntax
+
+```javascript
+// Simple equality
+db.users.find({ name: "alice" })
+
+// Comparison operators
+db.users.find({ age: { $gt: 25 } })
+db.users.find({ age: { $lte: 30 } })
+
+// Multiple conditions
+db.users.find({ active: true, age: { $gte: 18 } })
+
+// Array operators
+db.users.find({ tags: { $in: ["admin", "user"] } })
+```
+
+## Supported Helper Functions
+
+| Helper | Example | BSON Type |
+|--------|---------|-----------|
+| `ObjectId()` | `ObjectId("507f1f77bcf86cd799439011")` | ObjectID |
+| `ISODate()` | `ISODate("2024-01-01T00:00:00Z")` | DateTime |
+| `new Date()` | `new Date("2024-01-01")` | DateTime |
+| `UUID()` | `UUID("550e8400-e29b-41d4-a716-446655440000")` | Binary (subtype 4) |
+| `Long()` / `NumberLong()` | `Long(123)` | int64 |
+| `Int32()` / `NumberInt()` | `Int32(123)` | int32 |
+| `Double()` | `Double(1.5)` | float64 |
+| `Decimal128()` | `Decimal128("123.45")` | Decimal128 |
+| `Timestamp()` | `Timestamp(1627811580, 1)` | Timestamp |
+| `/pattern/flags` | `/^test/i` | Regex |
+| `RegExp()` | `RegExp("pattern", "i")` | Regex |
 
 ## Output Format
 
@@ -91,9 +123,8 @@ Results are returned in Extended JSON (Relaxed) format:
 ## Roadmap
 
 Future versions will add:
-- Filter support for `find()` and `findOne()`
+- `findOne()` support
 - Cursor modifiers (sort, limit, skip, projection)
-- Helper functions (ObjectId, ISODate, UUID, NumberLong, etc.)
 - Shell commands (show dbs, show collections)
 
 ## License
