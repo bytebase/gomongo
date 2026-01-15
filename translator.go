@@ -16,6 +16,7 @@ const (
 	opUnknown operationType = iota
 	opFind
 	opFindOne
+	opAggregate
 	opShowDatabases
 	opShowCollections
 	opGetCollectionNames
@@ -31,6 +32,8 @@ type mongoOperation struct {
 	limit      *int64
 	skip       *int64
 	projection bson.D
+	// Aggregation pipeline
+	pipeline bson.A
 }
 
 // mongoShellVisitor extracts operations from a parse tree.
@@ -293,6 +296,54 @@ func (v *mongoShellVisitor) extractProjection(ctx mongodb.IProjectionMethodConte
 	v.operation.projection = projection
 }
 
+func (v *mongoShellVisitor) extractAggregationPipeline(ctx *mongodb.GenericMethodContext) {
+	args := ctx.Arguments()
+	if args == nil {
+		// Empty pipeline: aggregate()
+		v.operation.pipeline = bson.A{}
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("aggregate() requires an array argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.operation.pipeline = bson.A{}
+		return
+	}
+
+	// First argument should be the pipeline array
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("aggregate() requires an array argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("aggregate() requires an array argument")
+		return
+	}
+
+	arrayValue, ok := valueCtx.(*mongodb.ArrayValueContext)
+	if !ok {
+		v.err = fmt.Errorf("aggregate() requires an array argument, got %T", valueCtx)
+		return
+	}
+
+	pipeline, err := convertArray(arrayValue.Array())
+	if err != nil {
+		v.err = fmt.Errorf("invalid aggregation pipeline: %w", err)
+		return
+	}
+
+	v.operation.pipeline = pipeline
+}
+
 func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	mc, ok := ctx.(*mongodb.MethodCallContext)
 	if !ok {
@@ -314,10 +365,19 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	} else if mc.ProjectionMethod() != nil {
 		v.extractProjection(mc.ProjectionMethod())
 	} else if gm := mc.GenericMethod(); gm != nil {
-		methodName := gm.Identifier().GetText()
-		v.err = &UnsupportedOperationError{
-			Operation: methodName,
-			Hint:      "unknown method",
+		gmCtx, ok := gm.(*mongodb.GenericMethodContext)
+		if !ok {
+			return
+		}
+		methodName := gmCtx.Identifier().GetText()
+		if methodName == "aggregate" {
+			v.operation.opType = opAggregate
+			v.extractAggregationPipeline(gmCtx)
+		} else {
+			v.err = &UnsupportedOperationError{
+				Operation: methodName,
+				Hint:      "unknown method",
+			}
 		}
 	}
 }

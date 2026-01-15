@@ -648,3 +648,717 @@ func TestGetCollectionNames(t *testing.T) {
 	require.True(t, collectionSet["products"], "expected 'products' collection")
 	require.True(t, collectionSet["categories"], "expected 'categories' collection")
 }
+
+func TestAggregateBasic(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "apple", "price": 1, "category": "fruit"},
+		bson.M{"name": "banana", "price": 2, "category": "fruit"},
+		bson.M{"name": "carrot", "price": 3, "category": "vegetable"},
+		bson.M{"name": "date", "price": 4, "category": "fruit"},
+		bson.M{"name": "eggplant", "price": 5, "category": "vegetable"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name          string
+		statement     string
+		expectedCount int
+		checkResult   func(t *testing.T, rows []string)
+	}{
+		{
+			name:          "empty pipeline",
+			statement:     `db.items.aggregate([])`,
+			expectedCount: 5,
+		},
+		{
+			name:          "empty pipeline no args",
+			statement:     `db.items.aggregate()`,
+			expectedCount: 5,
+		},
+		{
+			name:          "$match stage",
+			statement:     `db.items.aggregate([{ $match: { category: "fruit" } }])`,
+			expectedCount: 3,
+		},
+		{
+			name:          "$sort ascending",
+			statement:     `db.items.aggregate([{ $sort: { price: 1 } }])`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"apple"`)
+				require.Contains(t, rows[4], `"eggplant"`)
+			},
+		},
+		{
+			name:          "$sort descending",
+			statement:     `db.items.aggregate([{ $sort: { price: -1 } }])`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"eggplant"`)
+				require.Contains(t, rows[4], `"apple"`)
+			},
+		},
+		{
+			name:          "$limit stage",
+			statement:     `db.items.aggregate([{ $limit: 2 }])`,
+			expectedCount: 2,
+		},
+		{
+			name:          "$skip stage",
+			statement:     `db.items.aggregate([{ $sort: { price: 1 } }, { $skip: 3 }])`,
+			expectedCount: 2,
+		},
+		{
+			name:          "$project include",
+			statement:     `db.items.aggregate([{ $project: { name: 1, _id: 0 } }])`,
+			expectedCount: 5,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"name"`)
+				require.NotContains(t, rows[0], `"_id"`)
+				require.NotContains(t, rows[0], `"price"`)
+			},
+		},
+		{
+			name:          "$count stage",
+			statement:     `db.items.aggregate([{ $count: "total" }])`,
+			expectedCount: 1,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"total": 5`)
+			},
+		},
+		{
+			name:          "multi-stage: match and sort",
+			statement:     `db.items.aggregate([{ $match: { category: "fruit" } }, { $sort: { price: -1 } }])`,
+			expectedCount: 3,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"date"`)
+			},
+		},
+		{
+			name:          "multi-stage: match, sort, limit",
+			statement:     `db.items.aggregate([{ $match: { category: "fruit" } }, { $sort: { price: 1 } }, { $limit: 2 }])`,
+			expectedCount: 2,
+			checkResult: func(t *testing.T, rows []string) {
+				require.Contains(t, rows[0], `"apple"`)
+				require.Contains(t, rows[1], `"banana"`)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, tc.expectedCount, result.RowCount)
+			if tc.checkResult != nil && result.RowCount > 0 {
+				tc.checkResult(t, result.Rows)
+			}
+		})
+	}
+}
+
+func TestAggregateGroup(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("sales")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"item": "apple", "quantity": 10, "price": 1.5},
+		bson.M{"item": "banana", "quantity": 5, "price": 2.0},
+		bson.M{"item": "apple", "quantity": 8, "price": 1.5},
+		bson.M{"item": "banana", "quantity": 3, "price": 2.0},
+		bson.M{"item": "carrot", "quantity": 15, "price": 0.5},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name          string
+		statement     string
+		expectedCount int
+		checkResult   func(t *testing.T, rows []string)
+	}{
+		{
+			name:          "$group by field",
+			statement:     `db.sales.aggregate([{ $group: { _id: "$item" } }])`,
+			expectedCount: 3,
+		},
+		{
+			name:          "$group with $sum",
+			statement:     `db.sales.aggregate([{ $group: { _id: "$item", totalQuantity: { $sum: "$quantity" } } }])`,
+			expectedCount: 3,
+		},
+		{
+			name:          "$group with $avg",
+			statement:     `db.sales.aggregate([{ $group: { _id: "$item", avgQuantity: { $avg: "$quantity" } } }])`,
+			expectedCount: 3,
+		},
+		{
+			name: "$group with multiple accumulators",
+			statement: `db.sales.aggregate([
+				{ $group: {
+					_id: "$item",
+					totalQuantity: { $sum: "$quantity" },
+					avgQuantity: { $avg: "$quantity" },
+					count: { $sum: 1 }
+				}}
+			])`,
+			expectedCount: 3,
+		},
+		{
+			name: "$group then $sort",
+			statement: `db.sales.aggregate([
+				{ $group: { _id: "$item", total: { $sum: "$quantity" } } },
+				{ $sort: { total: -1 } }
+			])`,
+			expectedCount: 3,
+			checkResult: func(t *testing.T, rows []string) {
+				// apple has 18 total, should be first
+				require.Contains(t, rows[0], `"apple"`)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, tc.expectedCount, result.RowCount)
+			if tc.checkResult != nil && result.RowCount > 0 {
+				tc.checkResult(t, result.Rows)
+			}
+		})
+	}
+}
+
+func TestAggregateCollectionAccess(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("my-items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "test1"},
+		bson.M{"name": "test2"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name      string
+		statement string
+	}{
+		{"dot notation", `db.users.aggregate([])`},
+		{"bracket notation", `db["my-items"].aggregate([{ $limit: 1 }])`},
+		{"getCollection", `db.getCollection("my-items").aggregate([{ $limit: 1 }])`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+		})
+	}
+}
+
+// TestAggregateFilteredSubset tests the "Filtered Subset" example from MongoDB docs
+// https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/filtered-subset/
+func TestAggregateFilteredSubset(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("persons")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{
+			"person_id":   "6392529400",
+			"firstname":   "Elise",
+			"lastname":    "Smith",
+			"dateofbirth": time.Date(1972, 1, 13, 9, 32, 7, 0, time.UTC),
+			"vocation":    "ENGINEER",
+			"address":     bson.M{"number": 5625, "street": "Tipa Circle", "city": "Wojzinmoj"},
+		},
+		bson.M{
+			"person_id":   "1723338115",
+			"firstname":   "Olive",
+			"lastname":    "Ranieri",
+			"dateofbirth": time.Date(1985, 5, 12, 23, 14, 30, 0, time.UTC),
+			"gender":      "FEMALE",
+			"vocation":    "ENGINEER",
+			"address":     bson.M{"number": 9303, "street": "Mele Circle", "city": "Tobihbo"},
+		},
+		bson.M{
+			"person_id":   "8732762874",
+			"firstname":   "Toni",
+			"lastname":    "Jones",
+			"dateofbirth": time.Date(1991, 11, 23, 16, 53, 56, 0, time.UTC),
+			"vocation":    "POLITICIAN",
+			"address":     bson.M{"number": 1, "street": "High Street", "city": "Upper Abbeywoodington"},
+		},
+		bson.M{
+			"person_id":   "7363629563",
+			"firstname":   "Bert",
+			"lastname":    "Gooding",
+			"dateofbirth": time.Date(1941, 4, 7, 22, 11, 52, 0, time.UTC),
+			"vocation":    "FLORIST",
+			"address":     bson.M{"number": 13, "street": "Upper Bold Road", "city": "Redringtonville"},
+		},
+		bson.M{
+			"person_id":   "1029648329",
+			"firstname":   "Sophie",
+			"lastname":    "Celements",
+			"dateofbirth": time.Date(1959, 7, 6, 17, 35, 45, 0, time.UTC),
+			"vocation":    "ENGINEER",
+			"address":     bson.M{"number": 5, "street": "Innings Close", "city": "Basilbridge"},
+		},
+		bson.M{
+			"person_id":   "7363626383",
+			"firstname":   "Carl",
+			"lastname":    "Simmons",
+			"dateofbirth": time.Date(1998, 12, 26, 13, 13, 55, 0, time.UTC),
+			"vocation":    "ENGINEER",
+			"address":     bson.M{"number": 187, "street": "Hillside Road", "city": "Kenningford"},
+		},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Find 3 youngest engineers
+	statement := `db.persons.aggregate([
+		{ $match: { vocation: "ENGINEER" } },
+		{ $sort: { dateofbirth: -1 } },
+		{ $limit: 3 },
+		{ $unset: ["_id", "vocation", "address"] }
+	])`
+
+	result, err := gc.Execute(ctx, "testdb", statement)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 3, result.RowCount)
+
+	// Carl (1998) should be first (youngest)
+	require.Contains(t, result.Rows[0], `"Carl"`)
+	// Olive (1985) should be second
+	require.Contains(t, result.Rows[1], `"Olive"`)
+	// Elise (1972) should be third
+	require.Contains(t, result.Rows[2], `"Elise"`)
+
+	// Verify _id, vocation, and address are excluded
+	require.NotContains(t, result.Rows[0], `"_id"`)
+	require.NotContains(t, result.Rows[0], `"vocation"`)
+	require.NotContains(t, result.Rows[0], `"address"`)
+}
+
+// TestAggregateGroupAndTotal tests the "Group and Total" example from MongoDB docs
+// https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/group-and-total/
+func TestAggregateGroupAndTotal(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("orders")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{
+			"customer_id": "elise_smith@myemail.com",
+			"orderdate":   time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
+			"value":       231.43,
+		},
+		bson.M{
+			"customer_id": "elise_smith@myemail.com",
+			"orderdate":   time.Date(2020, 1, 13, 9, 32, 7, 0, time.UTC),
+			"value":       99.99,
+		},
+		bson.M{
+			"customer_id": "oranieri@warmmail.com",
+			"orderdate":   time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
+			"value":       63.13,
+		},
+		bson.M{
+			"customer_id": "tj@wheresmyemail.com",
+			"orderdate":   time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
+			"value":       2.01,
+		},
+		bson.M{
+			"customer_id": "tj@wheresmyemail.com",
+			"orderdate":   time.Date(2020, 11, 23, 22, 56, 53, 0, time.UTC),
+			"value":       187.99,
+		},
+		bson.M{
+			"customer_id": "tj@wheresmyemail.com",
+			"orderdate":   time.Date(2020, 8, 18, 23, 4, 48, 0, time.UTC),
+			"value":       4.59,
+		},
+		bson.M{
+			"customer_id": "elise_smith@myemail.com",
+			"orderdate":   time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
+			"value":       48.50,
+		},
+		bson.M{
+			"customer_id": "tj@wheresmyemail.com",
+			"orderdate":   time.Date(2021, 2, 28, 7, 49, 32, 0, time.UTC),
+			"value":       1024.89,
+		},
+		bson.M{
+			"customer_id": "elise_smith@myemail.com",
+			"orderdate":   time.Date(2020, 10, 3, 13, 49, 44, 0, time.UTC),
+			"value":       102.24,
+		},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Group orders by customer for year 2020
+	statement := `db.orders.aggregate([
+		{ $match: {
+			orderdate: {
+				$gte: ISODate("2020-01-01T00:00:00Z"),
+				$lt: ISODate("2021-01-01T00:00:00Z")
+			}
+		}},
+		{ $sort: { orderdate: 1 } },
+		{ $group: {
+			_id: "$customer_id",
+			first_purchase_date: { $first: "$orderdate" },
+			total_value: { $sum: "$value" },
+			total_orders: { $sum: 1 }
+		}},
+		{ $sort: { first_purchase_date: 1 } },
+		{ $set: { customer_id: "$_id" } },
+		{ $unset: ["_id"] }
+	])`
+
+	result, err := gc.Execute(ctx, "testdb", statement)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 3, result.RowCount)
+
+	// oranieri should be first (earliest order in 2020: Jan 1)
+	require.Contains(t, result.Rows[0], `"oranieri@warmmail.com"`)
+
+	// Verify structure
+	require.Contains(t, result.Rows[0], `"customer_id"`)
+	require.Contains(t, result.Rows[0], `"total_value"`)
+	require.Contains(t, result.Rows[0], `"total_orders"`)
+	require.NotContains(t, result.Rows[0], `"_id"`)
+}
+
+// TestAggregateUnwindArrays tests the "Unpack Arrays" example from MongoDB docs
+// https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/unpack-arrays/
+func TestAggregateUnwindArrays(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("orders")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{
+			"order_id": 6363763262239,
+			"products": []bson.M{
+				{"prod_id": "abc12345", "name": "Asus Laptop", "price": 431.43},
+				{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 22.13},
+			},
+		},
+		bson.M{
+			"order_id": 1197372932325,
+			"products": []bson.M{
+				{"prod_id": "abc12345", "name": "Asus Laptop", "price": 429.99},
+			},
+		},
+		bson.M{
+			"order_id": 9812343774839,
+			"products": []bson.M{
+				{"prod_id": "pqr88223", "name": "Morphy Richards Food Mixer", "price": 431.43},
+				{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 21.78},
+			},
+		},
+		bson.M{
+			"order_id": 4433997244387,
+			"products": []bson.M{
+				{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 23.43},
+				{"prod_id": "jkl77336", "name": "Picky Pencil Sharpener", "price": 0.67},
+				{"prod_id": "xyz11228", "name": "Russell Hobbs Chrome Kettle", "price": 15.76},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Unpack products, filter by price > 15, group by product
+	statement := `db.orders.aggregate([
+		{ $unwind: { path: "$products" } },
+		{ $match: { "products.price": { $gt: 15 } } },
+		{ $group: {
+			_id: "$products.prod_id",
+			product: { $first: "$products.name" },
+			total_value: { $sum: "$products.price" },
+			quantity: { $sum: 1 }
+		}},
+		{ $set: { product_id: "$_id" } },
+		{ $unset: ["_id"] }
+	])`
+
+	result, err := gc.Execute(ctx, "testdb", statement)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Should have: abc12345 (2x), def45678 (3x but all > 15), pqr88223 (1x), xyz11228 (1x)
+	require.Equal(t, 4, result.RowCount)
+
+	// Verify structure
+	require.Contains(t, result.Rows[0], `"product_id"`)
+	require.Contains(t, result.Rows[0], `"product"`)
+	require.Contains(t, result.Rows[0], `"total_value"`)
+	require.Contains(t, result.Rows[0], `"quantity"`)
+}
+
+// TestAggregateOneToOneJoin tests the "One-to-One Join" example from MongoDB docs
+// https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/one-to-one-join/
+func TestAggregateOneToOneJoin(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create products collection
+	productsCollection := client.Database("testdb").Collection("products")
+	_, err := productsCollection.InsertMany(ctx, []any{
+		bson.M{
+			"id":          "a1b2c3d4",
+			"name":        "Asus Laptop",
+			"category":    "ELECTRONICS",
+			"description": "Good value laptop for students",
+		},
+		bson.M{
+			"id":          "z9y8x7w6",
+			"name":        "The Day Of The Triffids",
+			"category":    "BOOKS",
+			"description": "Classic post-apocalyptic novel",
+		},
+		bson.M{
+			"id":          "ff11gg22hh33",
+			"name":        "Morphy Richards Food Mixer",
+			"category":    "KITCHENWARE",
+			"description": "Luxury mixer turning good cakes into great",
+		},
+		bson.M{
+			"id":          "pqr678st",
+			"name":        "Karcher Hose Set",
+			"category":    "GARDEN",
+			"description": "Hose + nozzles + winder for tidy storage",
+		},
+	})
+	require.NoError(t, err)
+
+	// Create orders collection
+	ordersCollection := client.Database("testdb").Collection("orders")
+	_, err = ordersCollection.InsertMany(ctx, []any{
+		bson.M{
+			"customer_id": "elise_smith@myemail.com",
+			"orderdate":   time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
+			"product_id":  "a1b2c3d4",
+			"value":       431.43,
+		},
+		bson.M{
+			"customer_id": "tj@wheresmyemail.com",
+			"orderdate":   time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
+			"product_id":  "z9y8x7w6",
+			"value":       5.01,
+		},
+		bson.M{
+			"customer_id": "oranieri@warmmail.com",
+			"orderdate":   time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
+			"product_id":  "ff11gg22hh33",
+			"value":       63.13,
+		},
+		bson.M{
+			"customer_id": "jjones@tepidmail.com",
+			"orderdate":   time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
+			"product_id":  "a1b2c3d4",
+			"value":       429.65,
+		},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Join orders to products
+	statement := `db.orders.aggregate([
+		{ $match: {
+			orderdate: {
+				$gte: ISODate("2020-01-01T00:00:00Z"),
+				$lt: ISODate("2021-01-01T00:00:00Z")
+			}
+		}},
+		{ $lookup: {
+			from: "products",
+			localField: "product_id",
+			foreignField: "id",
+			as: "product_mapping"
+		}},
+		{ $set: { product_mapping: { $first: "$product_mapping" } } },
+		{ $set: {
+			product_name: "$product_mapping.name",
+			product_category: "$product_mapping.category"
+		}},
+		{ $unset: ["_id", "product_id", "product_mapping"] }
+	])`
+
+	result, err := gc.Execute(ctx, "testdb", statement)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 3, result.RowCount) // Only 2020 orders: elise, oranieri, jjones
+
+	// Verify joined fields exist
+	require.Contains(t, result.Rows[0], `"product_name"`)
+	require.Contains(t, result.Rows[0], `"product_category"`)
+	require.NotContains(t, result.Rows[0], `"_id"`)
+	require.NotContains(t, result.Rows[0], `"product_mapping"`)
+}
+
+// TestAggregateMultiFieldJoin tests the "Multi-Field Join" example from MongoDB docs
+// https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/multi-field-join/
+func TestAggregateMultiFieldJoin(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create products collection
+	productsCollection := client.Database("testdb").Collection("products")
+	_, err := productsCollection.InsertMany(ctx, []any{
+		bson.M{
+			"name":        "Asus Laptop",
+			"variation":   "Ultra HD",
+			"category":    "ELECTRONICS",
+			"description": "Great for watching movies",
+		},
+		bson.M{
+			"name":        "Asus Laptop",
+			"variation":   "Normal Display",
+			"category":    "ELECTRONICS",
+			"description": "Good value laptop for students",
+		},
+		bson.M{
+			"name":        "The Day Of The Triffids",
+			"variation":   "1st Edition",
+			"category":    "BOOKS",
+			"description": "Classic post-apocalyptic novel",
+		},
+		bson.M{
+			"name":        "The Day Of The Triffids",
+			"variation":   "2nd Edition",
+			"category":    "BOOKS",
+			"description": "Classic post-apocalyptic novel",
+		},
+		bson.M{
+			"name":        "Morphy Richards Food Mixer",
+			"variation":   "Deluxe",
+			"category":    "KITCHENWARE",
+			"description": "Luxury mixer turning good cakes into great",
+		},
+		bson.M{
+			"name":        "Karcher Hose Set",
+			"variation":   "Full Monty",
+			"category":    "GARDEN",
+			"description": "Hose + nozzles + winder for tidy storage",
+		},
+	})
+	require.NoError(t, err)
+
+	// Create orders collection
+	ordersCollection := client.Database("testdb").Collection("orders")
+	_, err = ordersCollection.InsertMany(ctx, []any{
+		bson.M{
+			"customer_id":       "elise_smith@myemail.com",
+			"orderdate":         time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
+			"product_name":      "Asus Laptop",
+			"product_variation": "Normal Display",
+			"value":             431.43,
+		},
+		bson.M{
+			"customer_id":       "tj@wheresmyemail.com",
+			"orderdate":         time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
+			"product_name":      "The Day Of The Triffids",
+			"product_variation": "2nd Edition",
+			"value":             5.01,
+		},
+		bson.M{
+			"customer_id":       "oranieri@warmmail.com",
+			"orderdate":         time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
+			"product_name":      "Morphy Richards Food Mixer",
+			"product_variation": "Deluxe",
+			"value":             63.13,
+		},
+		bson.M{
+			"customer_id":       "jjones@tepidmail.com",
+			"orderdate":         time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
+			"product_name":      "Asus Laptop",
+			"product_variation": "Normal Display",
+			"value":             429.65,
+		},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Multi-field join using $lookup with let and pipeline
+	statement := `db.products.aggregate([
+		{ $lookup: {
+			from: "orders",
+			let: { prdname: "$name", prdvartn: "$variation" },
+			pipeline: [
+				{ $match: {
+					$expr: {
+						$and: [
+							{ $eq: ["$product_name", "$$prdname"] },
+							{ $eq: ["$product_variation", "$$prdvartn"] }
+						]
+					}
+				}},
+				{ $match: {
+					orderdate: {
+						$gte: ISODate("2020-01-01T00:00:00Z"),
+						$lt: ISODate("2021-01-01T00:00:00Z")
+					}
+				}},
+				{ $unset: ["_id", "product_name", "product_variation"] }
+			],
+			as: "orders"
+		}},
+		{ $match: { orders: { $ne: [] } } },
+		{ $unset: ["_id"] }
+	])`
+
+	result, err := gc.Execute(ctx, "testdb", statement)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Should have: Asus Laptop Normal Display (2 orders), Morphy Richards (1 order)
+	require.Equal(t, 2, result.RowCount)
+
+	// Verify structure
+	require.Contains(t, result.Rows[0], `"orders"`)
+	require.Contains(t, result.Rows[0], `"name"`)
+	require.Contains(t, result.Rows[0], `"variation"`)
+	require.NotContains(t, result.Rows[0], `"_id"`)
+}
