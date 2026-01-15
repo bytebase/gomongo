@@ -61,6 +61,12 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 	switch op.opType {
 	case opFind:
 		return executeFind(ctx, client, database, op)
+	case opShowDatabases:
+		return executeShowDatabases(ctx, client)
+	case opShowCollections:
+		return executeShowCollections(ctx, client, database)
+	case opGetCollectionNames:
+		return executeGetCollectionNames(ctx, client, database)
 	default:
 		return nil, &UnsupportedOperationError{
 			Operation: statement,
@@ -121,4 +127,41 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 		Rows:     rows,
 		RowCount: len(rows),
 	}, nil
+}
+
+// executeShowDatabases executes a show dbs/databases command.
+func executeShowDatabases(ctx context.Context, client *mongo.Client) (*Result, error) {
+	names, err := client.ListDatabaseNames(ctx, bson.D{})
+	if err != nil {
+		return nil, fmt.Errorf("list databases failed: %w", err)
+	}
+
+	rows := make([]string, len(names))
+	copy(rows, names)
+
+	return &Result{
+		Rows:     rows,
+		RowCount: len(rows),
+	}, nil
+}
+
+// executeShowCollections executes a show collections command.
+func executeShowCollections(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	names, err := client.Database(database).ListCollectionNames(ctx, bson.D{})
+	if err != nil {
+		return nil, fmt.Errorf("list collections failed: %w", err)
+	}
+
+	rows := make([]string, len(names))
+	copy(rows, names)
+
+	return &Result{
+		Rows:     rows,
+		RowCount: len(rows),
+	}, nil
+}
+
+// executeGetCollectionNames executes a db.getCollectionNames() command.
+func executeGetCollectionNames(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	return executeShowCollections(ctx, client, database)
 }

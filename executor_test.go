@@ -379,3 +379,99 @@ func TestCollectionAccessPatterns(t *testing.T) {
 		})
 	}
 }
+
+func TestShowDatabases(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a database by inserting a document
+	_, err := client.Database("mydb").Collection("test").InsertOne(ctx, bson.M{"x": 1})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name      string
+		statement string
+	}{
+		{"show dbs", "show dbs"},
+		{"show databases", "show databases"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "mydb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.GreaterOrEqual(t, result.RowCount, 1)
+
+			// Check that mydb is in the result
+			found := false
+			for _, row := range result.Rows {
+				if row == "mydb" {
+					found = true
+					break
+				}
+			}
+			require.True(t, found, "expected 'mydb' in database list, got: %v", result.Rows)
+		})
+	}
+}
+
+func TestShowCollections(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create collections by inserting documents
+	_, err := client.Database("testdb").Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+	require.NoError(t, err)
+	_, err = client.Database("testdb").Collection("orders").InsertOne(ctx, bson.M{"item": "book"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", "show collections")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.RowCount)
+
+	// Check that both collections are in the result
+	collectionSet := make(map[string]bool)
+	for _, row := range result.Rows {
+		collectionSet[row] = true
+	}
+	require.True(t, collectionSet["users"], "expected 'users' collection")
+	require.True(t, collectionSet["orders"], "expected 'orders' collection")
+}
+
+func TestGetCollectionNames(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create collections by inserting documents
+	_, err := client.Database("testdb").Collection("products").InsertOne(ctx, bson.M{"name": "widget"})
+	require.NoError(t, err)
+	_, err = client.Database("testdb").Collection("categories").InsertOne(ctx, bson.M{"name": "electronics"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", "db.getCollectionNames()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.RowCount)
+
+	// Check that both collections are in the result
+	collectionSet := make(map[string]bool)
+	for _, row := range result.Rows {
+		collectionSet[row] = true
+	}
+	require.True(t, collectionSet["products"], "expected 'products' collection")
+	require.True(t, collectionSet["categories"], "expected 'categories' collection")
+}
