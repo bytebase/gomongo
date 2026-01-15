@@ -15,6 +15,7 @@ type operationType int
 const (
 	opUnknown operationType = iota
 	opFind
+	opFindOne
 	opShowDatabases
 	opShowCollections
 	opGetCollectionNames
@@ -177,6 +178,41 @@ func (v *mongoShellVisitor) extractFindFilter(ctx mongodb.IFindMethodContext) {
 	v.operation.filter = filter
 }
 
+func (v *mongoShellVisitor) extractFindOneFilter(ctx mongodb.IFindOneMethodContext) {
+	fm, ok := ctx.(*mongodb.FindOneMethodContext)
+	if !ok {
+		return
+	}
+
+	arg := fm.Argument()
+	if arg == nil {
+		return
+	}
+
+	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := argCtx.Value()
+	if valueCtx == nil {
+		return
+	}
+
+	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("findOne() filter must be a document")
+		return
+	}
+
+	filter, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.filter = filter
+}
+
 func (v *mongoShellVisitor) extractSort(ctx mongodb.ISortMethodContext) {
 	sm, ok := ctx.(*mongodb.SortMethodContext)
 	if !ok {
@@ -267,10 +303,8 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		v.operation.opType = opFind
 		v.extractFindFilter(mc.FindMethod())
 	} else if mc.FindOneMethod() != nil {
-		v.err = &UnsupportedOperationError{
-			Operation: "findOne",
-			Hint:      "not yet supported",
-		}
+		v.operation.opType = opFindOne
+		v.extractFindOneFilter(mc.FindOneMethod())
 	} else if mc.SortMethod() != nil {
 		v.extractSort(mc.SortMethod())
 	} else if mc.LimitMethod() != nil {

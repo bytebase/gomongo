@@ -61,6 +61,8 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 	switch op.opType {
 	case opFind:
 		return executeFind(ctx, client, database, op)
+	case opFindOne:
+		return executeFindOne(ctx, client, database, op)
 	case opShowDatabases:
 		return executeShowDatabases(ctx, client)
 	case opShowCollections:
@@ -126,6 +128,49 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 	return &Result{
 		Rows:     rows,
 		RowCount: len(rows),
+	}, nil
+}
+
+// executeFindOne executes a findOne operation.
+func executeFindOne(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
+	collection := client.Database(database).Collection(op.collection)
+
+	filter := op.filter
+	if filter == nil {
+		filter = bson.D{}
+	}
+
+	opts := options.FindOne()
+	if op.sort != nil {
+		opts.SetSort(op.sort)
+	}
+	if op.skip != nil {
+		opts.SetSkip(*op.skip)
+	}
+	if op.projection != nil {
+		opts.SetProjection(op.projection)
+	}
+
+	var doc bson.M
+	err := collection.FindOne(ctx, filter, opts).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return &Result{
+				Rows:     nil,
+				RowCount: 0,
+			}, nil
+		}
+		return nil, fmt.Errorf("findOne failed: %w", err)
+	}
+
+	jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal failed: %w", err)
+	}
+
+	return &Result{
+		Rows:     []string{string(jsonBytes)},
+		RowCount: 1,
 	}, nil
 }
 

@@ -95,6 +95,179 @@ func TestFindWithEmptyFilter(t *testing.T) {
 	require.Equal(t, 1, result.RowCount)
 }
 
+func TestFindOneEmptyCollection(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	result, err := gc.Execute(ctx, "testdb", "db.users.findOne()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 0, result.RowCount)
+	require.Empty(t, result.Rows)
+}
+
+func TestFindOneWithDocuments(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "age": 30},
+		bson.M{"name": "bob", "age": 25},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+	result, err := gc.Execute(ctx, "testdb", "db.users.findOne()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+	require.Len(t, result.Rows, 1)
+	require.Contains(t, result.Rows[0], "name")
+	require.Contains(t, result.Rows[0], "age")
+	require.Contains(t, result.Rows[0], "_id")
+}
+
+func TestFindOneWithFilter(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "age": 30},
+		bson.M{"name": "bob", "age": 25},
+		bson.M{"name": "carol", "age": 35},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name        string
+		statement   string
+		expectMatch bool
+		checkResult func(t *testing.T, row string)
+	}{
+		{
+			name:        "filter by string",
+			statement:   `db.users.findOne({ name: "bob" })`,
+			expectMatch: true,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"bob"`)
+				require.Contains(t, row, `"age": 25`)
+			},
+		},
+		{
+			name:        "filter by number",
+			statement:   `db.users.findOne({ age: 35 })`,
+			expectMatch: true,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"carol"`)
+			},
+		},
+		{
+			name:        "filter with no match",
+			statement:   `db.users.findOne({ name: "nobody" })`,
+			expectMatch: false,
+		},
+		{
+			name:        "filter with $gt operator",
+			statement:   `db.users.findOne({ age: { $gt: 30 } })`,
+			expectMatch: true,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"carol"`)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			if tc.expectMatch {
+				require.Equal(t, 1, result.RowCount)
+				if tc.checkResult != nil {
+					tc.checkResult(t, result.Rows[0])
+				}
+			} else {
+				require.Equal(t, 0, result.RowCount)
+			}
+		})
+	}
+}
+
+func TestFindOneWithOptions(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	collection := client.Database("testdb").Collection("items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "apple", "price": 1},
+		bson.M{"name": "banana", "price": 2},
+		bson.M{"name": "carrot", "price": 3},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	tests := []struct {
+		name        string
+		statement   string
+		checkResult func(t *testing.T, row string)
+	}{
+		{
+			name:      "sort ascending - returns first",
+			statement: `db.items.findOne().sort({ price: 1 })`,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"apple"`)
+			},
+		},
+		{
+			name:      "sort descending - returns first",
+			statement: `db.items.findOne().sort({ price: -1 })`,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"carrot"`)
+			},
+		},
+		{
+			name:      "skip",
+			statement: `db.items.findOne().sort({ price: 1 }).skip(1)`,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"banana"`)
+			},
+		},
+		{
+			name:      "projection include",
+			statement: `db.items.findOne().projection({ name: 1, _id: 0 })`,
+			checkResult: func(t *testing.T, row string) {
+				require.Contains(t, row, `"name"`)
+				require.NotContains(t, row, `"_id"`)
+				require.NotContains(t, row, `"price"`)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := gc.Execute(ctx, "testdb", tc.statement)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 1, result.RowCount)
+			tc.checkResult(t, result.Rows[0])
+		})
+	}
+}
+
 func TestParseError(t *testing.T) {
 	client, cleanup := setupTestContainer(t)
 	defer cleanup()
@@ -116,12 +289,12 @@ func TestUnsupportedOperation(t *testing.T) {
 	gc := gomongo.NewClient(client)
 	ctx := context.Background()
 
-	_, err := gc.Execute(ctx, "testdb", "db.users.findOne()")
+	_, err := gc.Execute(ctx, "testdb", "db.users.insertOne({ name: 'test' })")
 	require.Error(t, err)
 
 	var unsupportedErr *gomongo.UnsupportedOperationError
 	require.ErrorAs(t, err, &unsupportedErr)
-	require.Equal(t, "findOne", unsupportedErr.Operation)
+	require.Equal(t, "insertOne", unsupportedErr.Operation)
 }
 
 func TestFindWithFilter(t *testing.T) {
