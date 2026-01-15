@@ -15,6 +15,9 @@ type operationType int
 const (
 	opUnknown operationType = iota
 	opFind
+	opShowDatabases
+	opShowCollections
+	opGetCollectionNames
 )
 
 // mongoOperation represents a parsed MongoDB operation.
@@ -69,10 +72,7 @@ func (v *mongoShellVisitor) visitStatement(ctx mongodb.IStatementContext) {
 	if ctx.DbStatement() != nil {
 		v.visitDbStatement(ctx.DbStatement())
 	} else if ctx.ShellCommand() != nil {
-		v.err = &UnsupportedOperationError{
-			Operation: ctx.ShellCommand().GetText(),
-			Hint:      "shell commands not yet supported",
-		}
+		v.visitShellCommand(ctx.ShellCommand())
 	}
 }
 
@@ -81,9 +81,20 @@ func (v *mongoShellVisitor) visitDbStatement(ctx mongodb.IDbStatementContext) {
 	case *mongodb.CollectionOperationContext:
 		v.visitCollectionOperation(c)
 	case *mongodb.GetCollectionNamesContext:
+		v.operation.opType = opGetCollectionNames
+	}
+}
+
+func (v *mongoShellVisitor) visitShellCommand(ctx mongodb.IShellCommandContext) {
+	switch ctx.(type) {
+	case *mongodb.ShowDatabasesContext:
+		v.operation.opType = opShowDatabases
+	case *mongodb.ShowCollectionsContext:
+		v.operation.opType = opShowCollections
+	default:
 		v.err = &UnsupportedOperationError{
-			Operation: "getCollectionNames",
-			Hint:      "not yet supported",
+			Operation: ctx.GetText(),
+			Hint:      "unknown shell command",
 		}
 	}
 }
@@ -102,10 +113,7 @@ func (v *mongoShellVisitor) visitCollectionOperation(ctx *mongodb.CollectionOper
 }
 
 func (v *mongoShellVisitor) VisitGetCollectionNames(_ *mongodb.GetCollectionNamesContext) any {
-	v.err = &UnsupportedOperationError{
-		Operation: "getCollectionNames",
-		Hint:      "not yet supported",
-	}
+	v.operation.opType = opGetCollectionNames
 	return nil
 }
 
