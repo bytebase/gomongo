@@ -63,6 +63,8 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 		return executeFind(ctx, client, database, op)
 	case opFindOne:
 		return executeFindOne(ctx, client, database, op)
+	case opAggregate:
+		return executeAggregate(ctx, client, database, op)
 	case opShowDatabases:
 		return executeShowDatabases(ctx, client)
 	case opShowCollections:
@@ -114,6 +116,45 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 		}
 
 		// Marshal to Extended JSON (Relaxed)
+		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("marshal failed: %w", err)
+		}
+		rows = append(rows, string(jsonBytes))
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return &Result{
+		Rows:     rows,
+		RowCount: len(rows),
+	}, nil
+}
+
+// executeAggregate executes an aggregation pipeline.
+func executeAggregate(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
+	collection := client.Database(database).Collection(op.collection)
+
+	pipeline := op.pipeline
+	if pipeline == nil {
+		pipeline = bson.A{}
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate failed: %w", err)
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var rows []string
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode failed: %w", err)
+		}
+
 		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("marshal failed: %w", err)
