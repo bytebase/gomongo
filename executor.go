@@ -2,6 +2,7 @@ package gomongo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -79,6 +80,8 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 		return executeCountDocuments(ctx, client, database, op)
 	case opEstimatedDocumentCount:
 		return executeEstimatedDocumentCount(ctx, client, database, op)
+	case opDistinct:
+		return executeDistinct(ctx, client, database, op)
 	default:
 		return nil, &UnsupportedOperationError{
 			Operation: statement,
@@ -375,4 +378,52 @@ func executeEstimatedDocumentCount(ctx context.Context, client *mongo.Client, da
 		Rows:     []string{fmt.Sprintf("%d", count)},
 		RowCount: 1,
 	}, nil
+}
+
+// executeDistinct executes a db.collection.distinct() command.
+func executeDistinct(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
+	collection := client.Database(database).Collection(op.collection)
+
+	filter := op.filter
+	if filter == nil {
+		filter = bson.D{}
+	}
+
+	result := collection.Distinct(ctx, op.distinctField, filter)
+	if err := result.Err(); err != nil {
+		return nil, fmt.Errorf("distinct failed: %w", err)
+	}
+
+	var values []any
+	if err := result.Decode(&values); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+
+	var rows []string
+	for _, val := range values {
+		jsonBytes, err := marshalValue(val)
+		if err != nil {
+			return nil, fmt.Errorf("marshal failed: %w", err)
+		}
+		rows = append(rows, string(jsonBytes))
+	}
+
+	return &Result{
+		Rows:     rows,
+		RowCount: len(rows),
+	}, nil
+}
+
+// marshalValue marshals a value to JSON.
+// bson.MarshalExtJSONIndent only works for documents/arrays at top level,
+// so we use encoding/json for primitive values (strings, numbers, booleans).
+func marshalValue(val any) ([]byte, error) {
+	switch v := val.(type) {
+	case bson.M, bson.D, map[string]any:
+		return bson.MarshalExtJSONIndent(v, false, false, "", "  ")
+	case bson.A, []any:
+		return bson.MarshalExtJSONIndent(v, false, false, "", "  ")
+	default:
+		return json.Marshal(v)
+	}
 }

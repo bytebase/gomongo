@@ -1755,3 +1755,138 @@ func TestEstimatedDocumentCountWithEmptyOptions(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "2", result.Rows[0])
 }
+
+func TestDistinct(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "status": "active"},
+		bson.M{"name": "bob", "status": "inactive"},
+		bson.M{"name": "charlie", "status": "active"},
+		bson.M{"name": "diana", "status": "active"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test distinct on status field
+	result, err := gc.Execute(ctx, "testdb", `db.users.distinct("status")`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.RowCount)
+
+	// Verify both values are present
+	values := make(map[string]bool)
+	for _, row := range result.Rows {
+		values[row] = true
+	}
+	require.True(t, values[`"active"`] || values[`"inactive"`])
+}
+
+func TestDistinctWithFilter(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("products")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"category": "electronics", "brand": "Apple", "price": 999},
+		bson.M{"category": "electronics", "brand": "Samsung", "price": 799},
+		bson.M{"category": "electronics", "brand": "Apple", "price": 1299},
+		bson.M{"category": "clothing", "brand": "Nike", "price": 99},
+		bson.M{"category": "clothing", "brand": "Adidas", "price": 89},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test distinct with filter
+	result, err := gc.Execute(ctx, "testdb", `db.products.distinct("brand", { category: "electronics" })`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.RowCount)
+
+	// Verify only electronics brands are returned
+	values := make(map[string]bool)
+	for _, row := range result.Rows {
+		values[row] = true
+	}
+	require.True(t, values[`"Apple"`])
+	require.True(t, values[`"Samsung"`])
+	require.False(t, values[`"Nike"`])
+	require.False(t, values[`"Adidas"`])
+}
+
+func TestDistinctEmptyCollection(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	// Test distinct on empty/non-existent collection
+	result, err := gc.Execute(ctx, "testdb", `db.users.distinct("status")`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 0, result.RowCount)
+	require.Empty(t, result.Rows)
+}
+
+func TestDistinctBracketNotation(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with hyphenated name
+	collection := client.Database("testdb").Collection("user-logs")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"level": "info"},
+		bson.M{"level": "warn"},
+		bson.M{"level": "error"},
+		bson.M{"level": "info"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test with bracket notation
+	result, err := gc.Execute(ctx, "testdb", `db["user-logs"].distinct("level")`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 3, result.RowCount)
+}
+
+func TestDistinctNumericValues(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with numeric values
+	collection := client.Database("testdb").Collection("scores")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"score": 100},
+		bson.M{"score": 85},
+		bson.M{"score": 100},
+		bson.M{"score": 90},
+		bson.M{"score": 85},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test distinct on numeric field
+	result, err := gc.Execute(ctx, "testdb", `db.scores.distinct("score")`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 3, result.RowCount) // 100, 85, 90
+}
