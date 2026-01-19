@@ -23,6 +23,7 @@ const (
 	opGetCollectionInfos
 	opGetIndexes
 	opCountDocuments
+	opEstimatedDocumentCount
 )
 
 // mongoOperation represents a parsed MongoDB operation.
@@ -524,6 +525,8 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		case "countDocuments":
 			v.operation.opType = opCountDocuments
 			v.extractCountDocumentsArgs(gmCtx)
+		case "estimatedDocumentCount":
+			v.operation.opType = opEstimatedDocumentCount
 		default:
 			v.err = &UnsupportedOperationError{
 				Operation: methodName,

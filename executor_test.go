@@ -1691,3 +1691,67 @@ func TestCountDocumentsWithHint(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "2", result.Rows[0])
 }
+
+func TestEstimatedDocumentCount(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice"},
+		bson.M{"name": "bob"},
+		bson.M{"name": "charlie"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test estimatedDocumentCount
+	result, err := gc.Execute(ctx, "testdb", "db.users.estimatedDocumentCount()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+	require.Equal(t, "3", result.Rows[0])
+}
+
+func TestEstimatedDocumentCountEmptyCollection(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	// Test estimatedDocumentCount on empty/non-existent collection
+	result, err := gc.Execute(ctx, "testdb", "db.users.estimatedDocumentCount()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+	require.Equal(t, "0", result.Rows[0])
+}
+
+func TestEstimatedDocumentCountWithEmptyOptions(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"item": "a"},
+		bson.M{"item": "b"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test estimatedDocumentCount with empty options {}
+	result, err := gc.Execute(ctx, "testdb", "db.items.estimatedDocumentCount({})")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "2", result.Rows[0])
+}

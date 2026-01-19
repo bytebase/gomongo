@@ -77,6 +77,8 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 		return executeGetIndexes(ctx, client, database, op)
 	case opCountDocuments:
 		return executeCountDocuments(ctx, client, database, op)
+	case opEstimatedDocumentCount:
+		return executeEstimatedDocumentCount(ctx, client, database, op)
 	default:
 		return nil, &UnsupportedOperationError{
 			Operation: statement,
@@ -352,6 +354,21 @@ func executeCountDocuments(ctx context.Context, client *mongo.Client, database s
 	count, err := collection.CountDocuments(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("count documents failed: %w", err)
+	}
+
+	return &Result{
+		Rows:     []string{fmt.Sprintf("%d", count)},
+		RowCount: 1,
+	}, nil
+}
+
+// executeEstimatedDocumentCount executes a db.collection.estimatedDocumentCount() command.
+func executeEstimatedDocumentCount(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
+	collection := client.Database(database).Collection(op.collection)
+
+	count, err := collection.EstimatedDocumentCount(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("estimated document count failed: %w", err)
 	}
 
 	return &Result{
