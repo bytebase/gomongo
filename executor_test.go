@@ -1527,3 +1527,167 @@ func TestGetIndexesBracketNotation(t *testing.T) {
 	// Verify the _id index exists
 	require.Contains(t, result.Rows[0], `"name": "_id_"`)
 }
+
+func TestCountDocuments(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "age": 30},
+		bson.M{"name": "bob", "age": 25},
+		bson.M{"name": "charlie", "age": 35},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test countDocuments without filter
+	result, err := gc.Execute(ctx, "testdb", "db.users.countDocuments()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+	require.Equal(t, "3", result.Rows[0])
+}
+
+func TestCountDocumentsWithFilter(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "age": 30, "status": "active"},
+		bson.M{"name": "bob", "age": 25, "status": "inactive"},
+		bson.M{"name": "charlie", "age": 35, "status": "active"},
+		bson.M{"name": "diana", "age": 28, "status": "active"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test countDocuments with filter
+	result, err := gc.Execute(ctx, "testdb", `db.users.countDocuments({ status: "active" })`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+	require.Equal(t, "3", result.Rows[0])
+
+	// Test with comparison operator
+	result, err = gc.Execute(ctx, "testdb", `db.users.countDocuments({ age: { $gte: 30 } })`)
+	require.NoError(t, err)
+	require.Equal(t, "2", result.Rows[0])
+}
+
+func TestCountDocumentsEmptyCollection(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	// Test countDocuments on empty/non-existent collection
+	result, err := gc.Execute(ctx, "testdb", "db.users.countDocuments()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+	require.Equal(t, "0", result.Rows[0])
+}
+
+func TestCountDocumentsWithEmptyFilter(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"item": "a"},
+		bson.M{"item": "b"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test countDocuments with empty filter {}
+	result, err := gc.Execute(ctx, "testdb", "db.items.countDocuments({})")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "2", result.Rows[0])
+}
+
+func TestCountDocumentsWithOptions(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "age": 30},
+		bson.M{"name": "bob", "age": 25},
+		bson.M{"name": "charlie", "age": 35},
+		bson.M{"name": "diana", "age": 28},
+		bson.M{"name": "eve", "age": 32},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test with limit option
+	result, err := gc.Execute(ctx, "testdb", `db.users.countDocuments({}, { limit: 3 })`)
+	require.NoError(t, err)
+	require.Equal(t, "3", result.Rows[0])
+
+	// Test with skip option
+	result, err = gc.Execute(ctx, "testdb", `db.users.countDocuments({}, { skip: 2 })`)
+	require.NoError(t, err)
+	require.Equal(t, "3", result.Rows[0])
+
+	// Test with both limit and skip
+	result, err = gc.Execute(ctx, "testdb", `db.users.countDocuments({}, { skip: 1, limit: 2 })`)
+	require.NoError(t, err)
+	require.Equal(t, "2", result.Rows[0])
+}
+
+func TestCountDocumentsWithHint(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with documents and an index
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "alice", "status": "active"},
+		bson.M{"name": "bob", "status": "inactive"},
+		bson.M{"name": "charlie", "status": "active"},
+	})
+	require.NoError(t, err)
+
+	// Create an index on status
+	_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "status", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test with hint using index name
+	result, err := gc.Execute(ctx, "testdb", `db.users.countDocuments({ status: "active" }, { hint: "status_1" })`)
+	require.NoError(t, err)
+	require.Equal(t, "2", result.Rows[0])
+
+	// Test with hint using index specification document
+	result, err = gc.Execute(ctx, "testdb", `db.users.countDocuments({ status: "active" }, { hint: { status: 1 } })`)
+	require.NoError(t, err)
+	require.Equal(t, "2", result.Rows[0])
+}
