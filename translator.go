@@ -20,6 +20,7 @@ const (
 	opShowDatabases
 	opShowCollections
 	opGetCollectionNames
+	opGetCollectionInfos
 )
 
 // mongoOperation represents a parsed MongoDB operation.
@@ -86,6 +87,9 @@ func (v *mongoShellVisitor) visitDbStatement(ctx mongodb.IDbStatementContext) {
 		v.visitCollectionOperation(c)
 	case *mongodb.GetCollectionNamesContext:
 		v.operation.opType = opGetCollectionNames
+	case *mongodb.GetCollectionInfosContext:
+		v.operation.opType = opGetCollectionInfos
+		v.extractGetCollectionInfosArgs(c)
 	}
 }
 
@@ -119,6 +123,53 @@ func (v *mongoShellVisitor) visitCollectionOperation(ctx *mongodb.CollectionOper
 func (v *mongoShellVisitor) VisitGetCollectionNames(_ *mongodb.GetCollectionNamesContext) any {
 	v.operation.opType = opGetCollectionNames
 	return nil
+}
+
+func (v *mongoShellVisitor) VisitGetCollectionInfos(ctx *mongodb.GetCollectionInfosContext) any {
+	v.operation.opType = opGetCollectionInfos
+	v.extractGetCollectionInfosArgs(ctx)
+	return nil
+}
+
+func (v *mongoShellVisitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollectionInfosContext) {
+	args := ctx.Arguments()
+	if args == nil {
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		return
+	}
+
+	// First argument is the filter (optional)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		return
+	}
+
+	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("getCollectionInfos() filter must be a document")
+		return
+	}
+
+	filter, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.filter = filter
 }
 
 func (v *mongoShellVisitor) extractCollectionName(ctx mongodb.ICollectionAccessContext) string {

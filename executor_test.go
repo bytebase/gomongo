@@ -1362,3 +1362,75 @@ func TestAggregateMultiFieldJoin(t *testing.T) {
 	require.Contains(t, result.Rows[0], `"variation"`)
 	require.NotContains(t, result.Rows[0], `"_id"`)
 }
+
+func TestGetCollectionInfos(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create collections by inserting documents
+	_, err := client.Database("testdb").Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+	require.NoError(t, err)
+	_, err = client.Database("testdb").Collection("orders").InsertOne(ctx, bson.M{"item": "book"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test without filter - should return all collections
+	result, err := gc.Execute(ctx, "testdb", "db.getCollectionInfos()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.RowCount)
+
+	// Verify that results contain collection info structure
+	for _, row := range result.Rows {
+		require.Contains(t, row, `"name"`)
+		require.Contains(t, row, `"type"`)
+	}
+}
+
+func TestGetCollectionInfosWithFilter(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create collections by inserting documents
+	_, err := client.Database("testdb").Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+	require.NoError(t, err)
+	_, err = client.Database("testdb").Collection("orders").InsertOne(ctx, bson.M{"item": "book"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test with filter - should return only matching collection
+	result, err := gc.Execute(ctx, "testdb", `db.getCollectionInfos({ name: "users" })`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.RowCount)
+
+	// Verify that the returned collection is "users"
+	require.Contains(t, result.Rows[0], `"name": "users"`)
+	require.Contains(t, result.Rows[0], `"type": "collection"`)
+}
+
+func TestGetCollectionInfosEmptyResult(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection
+	_, err := client.Database("testdb").Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test with filter that matches no collections
+	result, err := gc.Execute(ctx, "testdb", `db.getCollectionInfos({ name: "nonexistent" })`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 0, result.RowCount)
+	require.Empty(t, result.Rows)
+}

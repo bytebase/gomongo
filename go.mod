@@ -4,7 +4,7 @@ go 1.24.5
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
-	github.com/bytebase/parser v0.0.0-20260113083029-8ac2a658441d
+	github.com/bytebase/parser v0.0.0-20260119035746-76308b5d11fd
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go/modules/mongodb v0.40.0
