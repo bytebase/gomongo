@@ -22,6 +22,8 @@ const (
 	opGetCollectionNames
 	opGetCollectionInfos
 	opGetIndexes
+	opCountDocuments
+	opEstimatedDocumentCount
 )
 
 // mongoOperation represents a parsed MongoDB operation.
@@ -36,6 +38,8 @@ type mongoOperation struct {
 	projection bson.D
 	// Aggregation pipeline
 	pipeline bson.A
+	// countDocuments options
+	hint any // string (index name) or document (index spec)
 }
 
 // mongoShellVisitor extracts operations from a parse tree.
@@ -171,6 +175,96 @@ func (v *mongoShellVisitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollec
 		return
 	}
 	v.operation.filter = filter
+}
+
+func (v *mongoShellVisitor) extractCountDocumentsArgs(ctx *mongodb.GenericMethodContext) {
+	args := ctx.Arguments()
+	if args == nil {
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		return
+	}
+
+	// First argument is the filter (optional)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		return
+	}
+
+	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("countDocuments() filter must be a document")
+		return
+	}
+
+	filter, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.filter = filter
+
+	// Second argument is the options (optional)
+	if len(allArgs) < 2 {
+		return
+	}
+
+	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	optionsValueCtx := secondArg.Value()
+	if optionsValueCtx == nil {
+		return
+	}
+
+	optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("countDocuments() options must be a document")
+		return
+	}
+
+	optionsDoc, err := convertDocument(optionsDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid options: %w", err)
+		return
+	}
+
+	// Extract supported options: hint, limit, skip
+	for _, elem := range optionsDoc {
+		switch elem.Key {
+		case "hint":
+			v.operation.hint = elem.Value
+		case "limit":
+			if val, ok := elem.Value.(int32); ok {
+				limit := int64(val)
+				v.operation.limit = &limit
+			} else if val, ok := elem.Value.(int64); ok {
+				v.operation.limit = &val
+			}
+		case "skip":
+			if val, ok := elem.Value.(int32); ok {
+				skip := int64(val)
+				v.operation.skip = &skip
+			} else if val, ok := elem.Value.(int64); ok {
+				v.operation.skip = &val
+			}
+		}
+	}
 }
 
 func (v *mongoShellVisitor) extractCollectionName(ctx mongodb.ICollectionAccessContext) string {
@@ -428,6 +522,11 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 			v.extractAggregationPipeline(gmCtx)
 		case "getIndexes":
 			v.operation.opType = opGetIndexes
+		case "countDocuments":
+			v.operation.opType = opCountDocuments
+			v.extractCountDocumentsArgs(gmCtx)
+		case "estimatedDocumentCount":
+			v.operation.opType = opEstimatedDocumentCount
 		default:
 			v.err = &UnsupportedOperationError{
 				Operation: methodName,
