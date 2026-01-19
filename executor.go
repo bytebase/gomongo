@@ -71,6 +71,8 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 		return executeShowCollections(ctx, client, database)
 	case opGetCollectionNames:
 		return executeGetCollectionNames(ctx, client, database)
+	case opGetCollectionInfos:
+		return executeGetCollectionInfos(ctx, client, database, op)
 	default:
 		return nil, &UnsupportedOperationError{
 			Operation: statement,
@@ -250,4 +252,41 @@ func executeShowCollections(ctx context.Context, client *mongo.Client, database 
 // executeGetCollectionNames executes a db.getCollectionNames() command.
 func executeGetCollectionNames(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
 	return executeShowCollections(ctx, client, database)
+}
+
+// executeGetCollectionInfos executes a db.getCollectionInfos() command.
+func executeGetCollectionInfos(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
+	filter := op.filter
+	if filter == nil {
+		filter = bson.D{}
+	}
+
+	cursor, err := client.Database(database).ListCollections(ctx, filter)
+	if err != nil {
+		return nil, fmt.Errorf("list collections failed: %w", err)
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var rows []string
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode failed: %w", err)
+		}
+
+		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("marshal failed: %w", err)
+		}
+		rows = append(rows, string(jsonBytes))
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return &Result{
+		Rows:     rows,
+		RowCount: len(rows),
+	}, nil
 }
