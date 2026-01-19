@@ -73,6 +73,8 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 		return executeGetCollectionNames(ctx, client, database)
 	case opGetCollectionInfos:
 		return executeGetCollectionInfos(ctx, client, database, op)
+	case opGetIndexes:
+		return executeGetIndexes(ctx, client, database, op)
 	default:
 		return nil, &UnsupportedOperationError{
 			Operation: statement,
@@ -264,6 +266,40 @@ func executeGetCollectionInfos(ctx context.Context, client *mongo.Client, databa
 	cursor, err := client.Database(database).ListCollections(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("list collections failed: %w", err)
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var rows []string
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode failed: %w", err)
+		}
+
+		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("marshal failed: %w", err)
+		}
+		rows = append(rows, string(jsonBytes))
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return &Result{
+		Rows:     rows,
+		RowCount: len(rows),
+	}, nil
+}
+
+// executeGetIndexes executes a db.collection.getIndexes() command.
+func executeGetIndexes(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
+	collection := client.Database(database).Collection(op.collection)
+
+	cursor, err := collection.Indexes().List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list indexes failed: %w", err)
 	}
 	defer func() { _ = cursor.Close(ctx) }()
 
