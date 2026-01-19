@@ -24,6 +24,7 @@ const (
 	opGetIndexes
 	opCountDocuments
 	opEstimatedDocumentCount
+	opDistinct
 )
 
 // mongoOperation represents a parsed MongoDB operation.
@@ -40,6 +41,8 @@ type mongoOperation struct {
 	pipeline bson.A
 	// countDocuments options
 	hint any // string (index name) or document (index spec)
+	// distinct field name
+	distinctField string
 }
 
 // mongoShellVisitor extracts operations from a parse tree.
@@ -166,6 +169,81 @@ func (v *mongoShellVisitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollec
 	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
 	if !ok {
 		v.err = fmt.Errorf("getCollectionInfos() filter must be a document")
+		return
+	}
+
+	filter, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.filter = filter
+}
+
+func (v *mongoShellVisitor) extractDistinctArgs(ctx *mongodb.GenericMethodContext) {
+	args := ctx.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	// First argument is the field name (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	literalValue, ok := valueCtx.(*mongodb.LiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() field name must be a string")
+		return
+	}
+
+	stringLiteral, ok := literalValue.Literal().(*mongodb.StringLiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() field name must be a string")
+		return
+	}
+
+	v.operation.distinctField = unquoteString(stringLiteral.StringLiteral().GetText())
+
+	// Second argument is the filter (optional)
+	if len(allArgs) < 2 {
+		return
+	}
+
+	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	filterValueCtx := secondArg.Value()
+	if filterValueCtx == nil {
+		return
+	}
+
+	docValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() filter must be a document")
 		return
 	}
 
@@ -527,6 +605,9 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 			v.extractCountDocumentsArgs(gmCtx)
 		case "estimatedDocumentCount":
 			v.operation.opType = opEstimatedDocumentCount
+		case "distinct":
+			v.operation.opType = opDistinct
+			v.extractDistinctArgs(gmCtx)
 		default:
 			v.err = &UnsupportedOperationError{
 				Operation: methodName,
