@@ -2,6 +2,7 @@ package gomongo_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -1433,4 +1434,96 @@ func TestGetCollectionInfosEmptyResult(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, 0, result.RowCount)
 	require.Empty(t, result.Rows)
+}
+
+func TestGetIndexes(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with a document (this creates the default _id index)
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test getIndexes - should return at least the _id index
+	result, err := gc.Execute(ctx, "testdb", "db.users.getIndexes()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.GreaterOrEqual(t, result.RowCount, 1)
+
+	// Verify the _id index exists
+	found := false
+	for _, row := range result.Rows {
+		if strings.Contains(row, `"name": "_id_"`) {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected _id_ index")
+}
+
+func TestGetIndexesWithCustomIndex(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection and add a custom index
+	collection := client.Database("testdb").Collection("users")
+	_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com"})
+	require.NoError(t, err)
+
+	// Create an index on the email field
+	_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "email", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", "db.users.getIndexes()")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.RowCount) // _id index + email index
+
+	// Verify both indexes exist
+	hasIdIndex := false
+	hasEmailIndex := false
+	for _, row := range result.Rows {
+		if strings.Contains(row, `"name": "_id_"`) {
+			hasIdIndex = true
+		}
+		if strings.Contains(row, `"email"`) {
+			hasEmailIndex = true
+		}
+	}
+	require.True(t, hasIdIndex, "expected _id_ index")
+	require.True(t, hasEmailIndex, "expected email index")
+}
+
+func TestGetIndexesBracketNotation(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection with hyphenated name
+	collection := client.Database("testdb").Collection("user-logs")
+	_, err := collection.InsertOne(ctx, bson.M{"message": "test"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Test with bracket notation
+	result, err := gc.Execute(ctx, "testdb", `db["user-logs"].getIndexes()`)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.GreaterOrEqual(t, result.RowCount, 1)
+
+	// Verify the _id index exists
+	require.Contains(t, result.Rows[0], `"name": "_id_"`)
 }

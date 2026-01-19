@@ -21,6 +21,7 @@ const (
 	opShowCollections
 	opGetCollectionNames
 	opGetCollectionInfos
+	opGetIndexes
 )
 
 // mongoOperation represents a parsed MongoDB operation.
@@ -421,10 +422,13 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 			return
 		}
 		methodName := gmCtx.Identifier().GetText()
-		if methodName == "aggregate" {
+		switch methodName {
+		case "aggregate":
 			v.operation.opType = opAggregate
 			v.extractAggregationPipeline(gmCtx)
-		} else {
+		case "getIndexes":
+			v.operation.opType = opGetIndexes
+		default:
 			v.err = &UnsupportedOperationError{
 				Operation: methodName,
 				Hint:      "unknown method",
