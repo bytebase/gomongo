@@ -1890,3 +1890,19 @@ func TestDistinctNumericValues(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, 3, result.RowCount) // 100, 85, 90
 }
+
+func TestCursorCountDeprecated(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	// cursor.count() is deprecated and should return an error
+	_, err := gc.Execute(ctx, "testdb", "db.users.find().count()")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "count()")
+	require.Contains(t, err.Error(), "countDocuments()")
+	require.Contains(t, err.Error(), "estimatedDocumentCount()")
+}

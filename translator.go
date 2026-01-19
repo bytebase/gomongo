@@ -608,6 +608,12 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		case "distinct":
 			v.operation.opType = opDistinct
 			v.extractDistinctArgs(gmCtx)
+		case "count":
+			// cursor.count() is deprecated
+			v.err = &UnsupportedOperationError{
+				Operation: "count()",
+				Hint:      "MongoDB drivers deprecate their respective cursor and collection count() APIs in favor of countDocuments() and estimatedDocumentCount()",
+			}
 		default:
 			v.err = &UnsupportedOperationError{
 				Operation: methodName,
