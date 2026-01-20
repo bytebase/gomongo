@@ -2,6 +2,7 @@ package gomongo_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -295,7 +296,36 @@ func TestUnsupportedOperation(t *testing.T) {
 
 	var unsupportedErr *gomongo.UnsupportedOperationError
 	require.ErrorAs(t, err, &unsupportedErr)
-	require.Equal(t, "insertOne", unsupportedErr.Operation)
+	require.Equal(t, "insertOne()", unsupportedErr.Operation)
+}
+
+func TestUnsupportedAtlasSearchIndex(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	// Test createSearchIndex
+	_, err := gc.Execute(ctx, "testdb", `db.movies.createSearchIndex({ name: "default", definition: { mappings: { dynamic: true } } })`)
+	require.Error(t, err)
+
+	var unsupportedErr *gomongo.UnsupportedOperationError
+	require.ErrorAs(t, err, &unsupportedErr)
+	require.Equal(t, "createSearchIndex()", unsupportedErr.Operation)
+	require.Contains(t, unsupportedErr.Hint, "Atlas Search Index")
+}
+
+func TestMethodRegistryStats(t *testing.T) {
+	total, deprecated, unsupported := gomongo.MethodRegistryStats()
+
+	// Verify we have a reasonable number of methods registered
+	require.GreaterOrEqual(t, total, 100, "expected at least 100 methods in registry")
+	require.GreaterOrEqual(t, deprecated, 20, "expected at least 20 deprecated methods")
+	require.GreaterOrEqual(t, unsupported, 80, "expected at least 80 unsupported methods")
+
+	// Log stats for visibility
+	t.Logf("Method Registry Stats: total=%d, deprecated=%d, unsupported=%d", total, deprecated, unsupported)
 }
 
 func TestFindWithFilter(t *testing.T) {
@@ -582,14 +612,7 @@ func TestShowDatabases(t *testing.T) {
 			require.GreaterOrEqual(t, result.RowCount, 1)
 
 			// Check that mydb is in the result
-			found := false
-			for _, row := range result.Rows {
-				if row == "mydb" {
-					found = true
-					break
-				}
-			}
-			require.True(t, found, "expected 'mydb' in database list, got: %v", result.Rows)
+			require.True(t, slices.Contains(result.Rows, "mydb"), "expected 'mydb' in database list, got: %v", result.Rows)
 		})
 	}
 }

@@ -30,3 +30,13 @@ func (e *UnsupportedOperationError) Error() string {
 	}
 	return fmt.Sprintf("unsupported operation %q", e.Operation)
 }
+
+// DeprecatedOperationError represents a deprecated operation with alternatives.
+type DeprecatedOperationError struct {
+	Operation   string
+	Alternative string
+}
+
+func (e *DeprecatedOperationError) Error() string {
+	return fmt.Sprintf("%s is deprecated. Use %s instead", e.Operation, e.Alternative)
+}

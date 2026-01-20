@@ -180,83 +180,17 @@ func (v *mongoShellVisitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollec
 	v.operation.filter = filter
 }
 
-func (v *mongoShellVisitor) extractDistinctArgs(ctx *mongodb.GenericMethodContext) {
-	args := ctx.Arguments()
-	if args == nil {
-		v.err = fmt.Errorf("distinct() requires a field name argument")
-		return
-	}
-
-	argsCtx, ok := args.(*mongodb.ArgumentsContext)
-	if !ok {
-		v.err = fmt.Errorf("distinct() requires a field name argument")
-		return
-	}
-
-	allArgs := argsCtx.AllArgument()
-	if len(allArgs) == 0 {
-		v.err = fmt.Errorf("distinct() requires a field name argument")
-		return
-	}
-
-	// First argument is the field name (required)
-	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
-	if !ok {
-		v.err = fmt.Errorf("distinct() requires a field name argument")
-		return
-	}
-
-	valueCtx := firstArg.Value()
-	if valueCtx == nil {
-		v.err = fmt.Errorf("distinct() requires a field name argument")
-		return
-	}
-
-	literalValue, ok := valueCtx.(*mongodb.LiteralValueContext)
-	if !ok {
-		v.err = fmt.Errorf("distinct() field name must be a string")
-		return
-	}
-
-	stringLiteral, ok := literalValue.Literal().(*mongodb.StringLiteralValueContext)
-	if !ok {
-		v.err = fmt.Errorf("distinct() field name must be a string")
-		return
-	}
-
-	v.operation.distinctField = unquoteString(stringLiteral.StringLiteral().GetText())
-
-	// Second argument is the filter (optional)
-	if len(allArgs) < 2 {
-		return
-	}
-
-	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+// extractCountDocumentsArgsFromMethod extracts arguments from CountDocumentsMethodContext.
+func (v *mongoShellVisitor) extractCountDocumentsArgsFromMethod(ctx mongodb.ICountDocumentsMethodContext) {
+	method, ok := ctx.(*mongodb.CountDocumentsMethodContext)
 	if !ok {
 		return
 	}
-
-	filterValueCtx := secondArg.Value()
-	if filterValueCtx == nil {
-		return
-	}
-
-	docValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
-	if !ok {
-		v.err = fmt.Errorf("distinct() filter must be a document")
-		return
-	}
-
-	filter, err := convertDocument(docValue.Document())
-	if err != nil {
-		v.err = fmt.Errorf("invalid filter: %w", err)
-		return
-	}
-	v.operation.filter = filter
+	v.extractArgumentsForCountDocuments(method.Arguments())
 }
 
-func (v *mongoShellVisitor) extractCountDocumentsArgs(ctx *mongodb.GenericMethodContext) {
-	args := ctx.Arguments()
+// extractArgumentsForCountDocuments extracts countDocuments arguments from IArgumentsContext.
+func (v *mongoShellVisitor) extractArgumentsForCountDocuments(args mongodb.IArgumentsContext) {
 	if args == nil {
 		return
 	}
@@ -343,6 +277,147 @@ func (v *mongoShellVisitor) extractCountDocumentsArgs(ctx *mongodb.GenericMethod
 			}
 		}
 	}
+}
+
+// extractDistinctArgsFromMethod extracts arguments from DistinctMethodContext.
+func (v *mongoShellVisitor) extractDistinctArgsFromMethod(ctx mongodb.IDistinctMethodContext) {
+	method, ok := ctx.(*mongodb.DistinctMethodContext)
+	if !ok {
+		return
+	}
+	v.extractArgumentsForDistinct(method.Arguments())
+}
+
+// extractArgumentsForDistinct extracts distinct arguments from IArgumentsContext.
+func (v *mongoShellVisitor) extractArgumentsForDistinct(args mongodb.IArgumentsContext) {
+	if args == nil {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	// First argument is the field name (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("distinct() requires a field name argument")
+		return
+	}
+
+	literalValue, ok := valueCtx.(*mongodb.LiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() field name must be a string")
+		return
+	}
+
+	stringLiteral, ok := literalValue.Literal().(*mongodb.StringLiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() field name must be a string")
+		return
+	}
+
+	v.operation.distinctField = unquoteString(stringLiteral.StringLiteral().GetText())
+
+	// Second argument is the filter (optional)
+	if len(allArgs) < 2 {
+		return
+	}
+
+	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	filterValueCtx := secondArg.Value()
+	if filterValueCtx == nil {
+		return
+	}
+
+	docValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("distinct() filter must be a document")
+		return
+	}
+
+	filter, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.filter = filter
+}
+
+// extractAggregationPipelineFromMethod extracts pipeline from AggregateMethodContext.
+func (v *mongoShellVisitor) extractAggregationPipelineFromMethod(ctx mongodb.IAggregateMethodContext) {
+	method, ok := ctx.(*mongodb.AggregateMethodContext)
+	if !ok {
+		return
+	}
+	v.extractArgumentsForAggregate(method.Arguments())
+}
+
+// extractArgumentsForAggregate extracts aggregate pipeline from IArgumentsContext.
+func (v *mongoShellVisitor) extractArgumentsForAggregate(args mongodb.IArgumentsContext) {
+	if args == nil {
+		// Empty pipeline: aggregate()
+		v.operation.pipeline = bson.A{}
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("aggregate() requires an array argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.operation.pipeline = bson.A{}
+		return
+	}
+
+	// First argument should be the pipeline array
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("aggregate() requires an array argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("aggregate() requires an array argument")
+		return
+	}
+
+	arrayValue, ok := valueCtx.(*mongodb.ArrayValueContext)
+	if !ok {
+		v.err = fmt.Errorf("aggregate() requires an array argument, got %T", valueCtx)
+		return
+	}
+
+	pipeline, err := convertArray(arrayValue.Array())
+	if err != nil {
+		v.err = fmt.Errorf("invalid aggregation pipeline: %w", err)
+		return
+	}
+
+	v.operation.pipeline = pipeline
 }
 
 func (v *mongoShellVisitor) extractCollectionName(ctx mongodb.ICollectionAccessContext) string {
@@ -520,67 +595,42 @@ func (v *mongoShellVisitor) extractProjection(ctx mongodb.IProjectionMethodConte
 	v.operation.projection = projection
 }
 
-func (v *mongoShellVisitor) extractAggregationPipeline(ctx *mongodb.GenericMethodContext) {
-	args := ctx.Arguments()
-	if args == nil {
-		// Empty pipeline: aggregate()
-		v.operation.pipeline = bson.A{}
-		return
-	}
-
-	argsCtx, ok := args.(*mongodb.ArgumentsContext)
-	if !ok {
-		v.err = fmt.Errorf("aggregate() requires an array argument")
-		return
-	}
-
-	allArgs := argsCtx.AllArgument()
-	if len(allArgs) == 0 {
-		v.operation.pipeline = bson.A{}
-		return
-	}
-
-	// First argument should be the pipeline array
-	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
-	if !ok {
-		v.err = fmt.Errorf("aggregate() requires an array argument")
-		return
-	}
-
-	valueCtx := firstArg.Value()
-	if valueCtx == nil {
-		v.err = fmt.Errorf("aggregate() requires an array argument")
-		return
-	}
-
-	arrayValue, ok := valueCtx.(*mongodb.ArrayValueContext)
-	if !ok {
-		v.err = fmt.Errorf("aggregate() requires an array argument, got %T", valueCtx)
-		return
-	}
-
-	pipeline, err := convertArray(arrayValue.Array())
-	if err != nil {
-		v.err = fmt.Errorf("invalid aggregation pipeline: %w", err)
-		return
-	}
-
-	v.operation.pipeline = pipeline
-}
-
 func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	mc, ok := ctx.(*mongodb.MethodCallContext)
 	if !ok {
 		return
 	}
 
+	// Determine method context for error messages
+	getMethodContext := func() methodContext {
+		if v.operation.opType == opFind || v.operation.opType == opFindOne {
+			return contextCursor
+		}
+		return contextCollection
+	}
+
+	// Supported read operations
 	if mc.FindMethod() != nil {
 		v.operation.opType = opFind
 		v.extractFindFilter(mc.FindMethod())
 	} else if mc.FindOneMethod() != nil {
 		v.operation.opType = opFindOne
 		v.extractFindOneFilter(mc.FindOneMethod())
+	} else if mc.CountDocumentsMethod() != nil {
+		v.operation.opType = opCountDocuments
+		v.extractCountDocumentsArgsFromMethod(mc.CountDocumentsMethod())
+	} else if mc.EstimatedDocumentCountMethod() != nil {
+		v.operation.opType = opEstimatedDocumentCount
+	} else if mc.DistinctMethod() != nil {
+		v.operation.opType = opDistinct
+		v.extractDistinctArgsFromMethod(mc.DistinctMethod())
+	} else if mc.AggregateMethod() != nil {
+		v.operation.opType = opAggregate
+		v.extractAggregationPipelineFromMethod(mc.AggregateMethod())
+	} else if mc.GetIndexesMethod() != nil {
+		v.operation.opType = opGetIndexes
 	} else if mc.SortMethod() != nil {
+		// Supported cursor modifiers
 		v.extractSort(mc.SortMethod())
 	} else if mc.LimitMethod() != nil {
 		v.extractLimit(mc.LimitMethod())
@@ -588,37 +638,180 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		v.extractSkip(mc.SkipMethod())
 	} else if mc.ProjectionMethod() != nil {
 		v.extractProjection(mc.ProjectionMethod())
+	} else if mc.CountMethod() != nil {
+		// Deprecated cursor method
+		v.handleUnsupportedMethod(contextCursor, "count")
+	} else if mc.InsertOneMethod() != nil {
+		// Unsupported write operations
+		v.handleUnsupportedMethod(contextCollection, "insertOne")
+	} else if mc.InsertManyMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "insertMany")
+	} else if mc.UpdateOneMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "updateOne")
+	} else if mc.UpdateManyMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "updateMany")
+	} else if mc.DeleteOneMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "deleteOne")
+	} else if mc.DeleteManyMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "deleteMany")
+	} else if mc.ReplaceOneMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "replaceOne")
+	} else if mc.FindOneAndUpdateMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "findOneAndUpdate")
+	} else if mc.FindOneAndReplaceMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "findOneAndReplace")
+	} else if mc.FindOneAndDeleteMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "findOneAndDelete")
+	} else if mc.CreateIndexMethod() != nil {
+		// Unsupported index operations
+		v.handleUnsupportedMethod(contextCollection, "createIndex")
+	} else if mc.CreateIndexesMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "createIndexes")
+	} else if mc.DropIndexMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "dropIndex")
+	} else if mc.DropIndexesMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "dropIndexes")
+	} else if mc.DropMethod() != nil {
+		// Unsupported collection management
+		v.handleUnsupportedMethod(contextCollection, "drop")
+	} else if mc.RenameCollectionMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "renameCollection")
+	} else if mc.StatsMethod() != nil {
+		// Unsupported stats operations
+		v.handleUnsupportedMethod(contextCollection, "stats")
+	} else if mc.StorageSizeMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "storageSize")
+	} else if mc.TotalIndexSizeMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "totalIndexSize")
+	} else if mc.TotalSizeMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "totalSize")
+	} else if mc.DataSizeMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "dataSize")
+	} else if mc.IsCappedMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "isCapped")
+	} else if mc.ValidateMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "validate")
+	} else if mc.LatencyStatsMethod() != nil {
+		v.handleUnsupportedMethod(contextCollection, "latencyStats")
+	} else if mc.BatchSizeMethod() != nil {
+		// Unsupported cursor methods
+		v.handleUnsupportedMethod(contextCursor, "batchSize")
+	} else if mc.CloseMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "close")
+	} else if mc.CollationMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "collation")
+	} else if mc.CommentMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "comment")
+	} else if mc.ExplainMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "explain")
+	} else if mc.ForEachMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "forEach")
+	} else if mc.HasNextMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "hasNext")
+	} else if mc.HintMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "hint")
+	} else if mc.IsClosedMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "isClosed")
+	} else if mc.IsExhaustedMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "isExhausted")
+	} else if mc.ItcountMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "itcount")
+	} else if mc.MapMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "map")
+	} else if mc.MaxMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "max")
+	} else if mc.MaxAwaitTimeMSMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "maxAwaitTimeMS")
+	} else if mc.MaxTimeMSMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "maxTimeMS")
+	} else if mc.MinMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "min")
+	} else if mc.NextMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "next")
+	} else if mc.NoCursorTimeoutMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "noCursorTimeout")
+	} else if mc.ObjsLeftInBatchMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "objsLeftInBatch")
+	} else if mc.PrettyMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "pretty")
+	} else if mc.ReadConcernMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "readConcern")
+	} else if mc.ReadPrefMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "readPref")
+	} else if mc.ReturnKeyMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "returnKey")
+	} else if mc.ShowRecordIdMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "showRecordId")
+	} else if mc.SizeMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "size")
+	} else if mc.TailableMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "tailable")
+	} else if mc.ToArrayMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "toArray")
+	} else if mc.TryNextMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "tryNext")
+	} else if mc.AllowDiskUseMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "allowDiskUse")
+	} else if mc.AddOptionMethod() != nil {
+		v.handleUnsupportedMethod(contextCursor, "addOption")
 	} else if gm := mc.GenericMethod(); gm != nil {
+		// Fallback for any methods not explicitly handled above
 		gmCtx, ok := gm.(*mongodb.GenericMethodContext)
 		if !ok {
 			return
 		}
 		methodName := gmCtx.Identifier().GetText()
+
+		// Handle supported methods that may come through genericMethod
+		// (e.g., aggregate() with no arguments goes to genericMethod, not aggregateMethod)
 		switch methodName {
 		case "aggregate":
 			v.operation.opType = opAggregate
-			v.extractAggregationPipeline(gmCtx)
-		case "getIndexes":
-			v.operation.opType = opGetIndexes
+			v.extractArgumentsForAggregate(gmCtx.Arguments())
 		case "countDocuments":
 			v.operation.opType = opCountDocuments
-			v.extractCountDocumentsArgs(gmCtx)
+			v.extractArgumentsForCountDocuments(gmCtx.Arguments())
 		case "estimatedDocumentCount":
 			v.operation.opType = opEstimatedDocumentCount
 		case "distinct":
 			v.operation.opType = opDistinct
-			v.extractDistinctArgs(gmCtx)
-		case "count":
-			// cursor.count() is deprecated
-			v.err = &UnsupportedOperationError{
-				Operation: "count()",
-				Hint:      "MongoDB drivers deprecate their respective cursor and collection count() APIs in favor of countDocuments() and estimatedDocumentCount()",
-			}
+			v.extractArgumentsForDistinct(gmCtx.Arguments())
+		case "getIndexes":
+			v.operation.opType = opGetIndexes
 		default:
-			v.err = &UnsupportedOperationError{
-				Operation: methodName,
-				Hint:      "unknown method",
-			}
+			v.handleUnsupportedMethod(getMethodContext(), methodName)
+		}
+	}
+}
+
+// handleUnsupportedMethod checks the method registry and returns appropriate errors.
+func (v *mongoShellVisitor) handleUnsupportedMethod(ctx methodContext, methodName string) {
+	info, found := lookupMethod(ctx, methodName)
+	if !found {
+		// Method not in registry - unknown method
+		v.err = &UnsupportedOperationError{
+			Operation: methodName + "()",
+			Hint:      "unknown method",
+		}
+		return
+	}
+
+	switch info.status {
+	case statusDeprecated:
+		v.err = &DeprecatedOperationError{
+			Operation:   methodName + "()",
+			Alternative: info.alternative,
+		}
+	case statusUnsupported:
+		v.err = &UnsupportedOperationError{
+			Operation: methodName + "()",
+			Hint:      info.hint,
+		}
+	case statusSupported:
+		// This shouldn't happen - supported methods should be handled explicitly
+		v.err = &UnsupportedOperationError{
+			Operation: methodName + "()",
+			Hint:      "method is supported but not handled",
 		}
 	}
 }
