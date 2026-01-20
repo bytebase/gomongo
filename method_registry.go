@@ -733,7 +733,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// CONNECTION METHODS (16) - Mongo(), connect(), connection chain
+	// CONNECTION METHODS (17) - Mongo(), connect(), connection chain
 	// ============================================================
 	"connection:Mongo": {
 		status:  statusUnsupported,
@@ -817,7 +817,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// REPLICATION METHODS (14) - rs.* methods
+	// REPLICATION METHODS (15) - rs.* methods
 	// ============================================================
 	"replication:add": {
 		status:  statusUnsupported,
@@ -891,7 +891,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// SHARDING METHODS (52) - sh.* methods
+	// SHARDING METHODS (49) - sh.* methods
 	// ============================================================
 	"sharding:abortMoveCollection": {
 		status:  statusUnsupported,
@@ -1135,7 +1135,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// ENCRYPTION METHODS (17) - KeyVault, ClientEncryption
+	// ENCRYPTION METHODS (18) - KeyVault, ClientEncryption
 	// ============================================================
 	"encryption:ClientEncryption.createEncryptedCollection": {
 		status:  statusUnsupported,
@@ -1224,7 +1224,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// BULK OPERATION METHODS (21)
+	// BULK OPERATION METHODS (22)
 	// ============================================================
 	"bulk:Bulk": {
 		status:  statusUnsupported,
@@ -1333,7 +1333,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// PLAN CACHE METHODS (5)
+	// PLAN CACHE METHODS (6)
 	// ============================================================
 	"plancache:getPlanCache": {
 		status:  statusUnsupported,
@@ -1362,7 +1362,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// STREAM PROCESSING METHODS (9) - sp.* Atlas Stream Processing
+	// STREAM PROCESSING METHODS (10) - sp.* Atlas Stream Processing
 	// ============================================================
 	"stream:createStreamProcessor": {
 		status:  statusUnsupported,
@@ -1411,7 +1411,7 @@ var methodRegistry = map[string]methodInfo{
 	},
 
 	// ============================================================
-	// NATIVE SHELL METHODS (16) - top-level functions
+	// NATIVE SHELL METHODS (18) - top-level functions
 	// ============================================================
 	"native:_isWindows": {
 		status:  statusUnsupported,
