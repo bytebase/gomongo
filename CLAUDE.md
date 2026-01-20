@@ -11,8 +11,9 @@ gomongo/
 ├── client.go              # Public API: Client, NewClient, Execute
 ├── executor.go            # Parse → Translate → Execute pipeline
 ├── translator.go          # Walk ANTLR parse tree, build driver operations
+├── method_registry.go     # Registry of MongoDB methods with status and hints
 ├── helper_functions.go    # Convert ObjectId(), ISODate(), etc. to BSON
-├── errors.go              # Error types (ParseError, UnsupportedOperationError)
+├── errors.go              # Error types (ParseError, UnsupportedOperationError, DeprecatedOperationError)
 ├── executor_test.go       # Integration tests with testcontainers
 └── go.mod
 ```
@@ -129,3 +130,27 @@ All query results are returned as Extended JSON (Relaxed) format using `bson.Mar
 - **Description** — Clearly describe what the PR changes and why
 - **Testing** — Include information about how the changes were tested
 - **Breaking Changes** — Clearly mark any breaking API changes
+
+## Adding New Method Support
+
+When adding support for a new MongoDB method:
+
+1. **Update `method_registry.go`** — Remove the method entry or change status to `statusSupported`
+2. **Update `translator.go`** — Add handler in `visitMethodCall()` for the new method
+3. **Add tests** — Create integration tests in `executor_test.go`
+4. **Update README** — Add the method to the supported methods list
+
+### Method Registry
+
+The `method_registry.go` file maintains metadata about MongoDB methods:
+
+- **statusSupported** — Method is implemented and working
+- **statusDeprecated** — Method is deprecated; error includes alternative suggestion
+- **statusUnsupported** — Method is recognized but not yet implemented
+
+When implementing a previously unsupported method, remove its entry from the registry (supported methods don't need registry entries).
+
+### Error Types
+
+- **UnsupportedOperationError** — For methods not yet implemented (includes hint)
+- **DeprecatedOperationError** — For deprecated methods (includes alternative)

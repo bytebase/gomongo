@@ -8,8 +8,8 @@ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERo
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/bytebase/antlr/v4 v4.0.0-20240827034948-8c385f108920 h1:IfmPt5o5R70NKtOrs+QHOoCgViYZelZysGxVBvV4ybA=
 github.com/bytebase/antlr/v4 v4.0.0-20240827034948-8c385f108920/go.mod h1:ykhjIPiv0IWpu3OGXCHdz2eUSe8UNGGD6baqjs8jSuU=
-github.com/bytebase/parser v0.0.0-20260119035746-76308b5d11fd h1:JCEEza5T4CTNWZuwHe6/7mqG7Qg+q2ZiHP00UtW+NtQ=
-github.com/bytebase/parser v0.0.0-20260119035746-76308b5d11fd/go.mod h1:jeak/EfutSOAuWKvrFIT2IZunhWprM7oTFBRgZ9RCxo=
+github.com/bytebase/parser v0.0.0-20260120080341-a57d4b68030c h1:owIVaPTU4DrzzajK0BsuyRtScB/8JNQco7bzg4ZduLA=
+github.com/bytebase/parser v0.0.0-20260120080341-a57d4b68030c/go.mod h1:jeak/EfutSOAuWKvrFIT2IZunhWprM7oTFBRgZ9RCxo=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=

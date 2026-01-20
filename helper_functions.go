@@ -52,27 +52,31 @@ func convertIsoDateHelper(ctx mongodb.IIsoDateHelperContext) (bson.DateTime, err
 	return parseDateTime(dateStr)
 }
 
-// convertDateHelper converts new Date() or Date() to primitive.DateTime or string.
+// convertDateHelper converts Date() to primitive.DateTime.
+// Note: 'new' keyword is no longer supported in the parser.
 func convertDateHelper(ctx mongodb.IDateHelperContext) (any, error) {
 	helper, ok := ctx.(*mongodb.DateHelperContext)
 	if !ok {
 		return nil, fmt.Errorf("invalid Date helper context")
 	}
 
-	hasNew := helper.NEW() != nil
-
-	if helper.StringLiteral() == nil {
-		if hasNew {
-			return bson.DateTime(time.Now().UnixMilli()), nil
-		}
-		return time.Now().Format(time.RFC3339), nil
-	}
-
-	dateStr := unquoteString(helper.StringLiteral().GetText())
-	if hasNew {
+	if helper.StringLiteral() != nil {
+		dateStr := unquoteString(helper.StringLiteral().GetText())
 		return parseDateTime(dateStr)
 	}
-	return dateStr, nil
+
+	if helper.NUMBER() != nil {
+		// Date(timestamp) - timestamp in milliseconds
+		numStr := helper.NUMBER().GetText()
+		ts, err := strconv.ParseInt(numStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid timestamp: %w", err)
+		}
+		return bson.DateTime(ts), nil
+	}
+
+	// Date() with no arguments returns current date
+	return bson.DateTime(time.Now().UnixMilli()), nil
 }
 
 // parseDateTime parses various date formats to primitive.DateTime.
