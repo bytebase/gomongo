@@ -37,3 +37,13 @@ type PlannedOperationError struct {
 func (e *PlannedOperationError) Error() string {
 	return fmt.Sprintf("operation %s is not yet implemented", e.Operation)
 }
+
+// UnsupportedOptionError represents an unsupported option in a supported method.
+type UnsupportedOptionError struct {
+	Method string
+	Option string
+}
+
+func (e *UnsupportedOptionError) Error() string {
+	return fmt.Sprintf("unsupported option '%s' in %s", e.Option, e.Method)
+}

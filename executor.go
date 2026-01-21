@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/bytebase/parser/mongodb"
@@ -111,6 +112,25 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 	if op.projection != nil {
 		opts.SetProjection(op.projection)
 	}
+	if op.hint != nil {
+		opts.SetHint(op.hint)
+	}
+	if op.max != nil {
+		opts.SetMax(op.max)
+	}
+	if op.min != nil {
+		opts.SetMin(op.min)
+	}
+
+	// Apply maxTimeMS using context timeout.
+	// Note: MongoDB Go driver v2 removed SetMaxTime() from options. The recommended
+	// replacement is context.WithTimeout(). This is a client-side timeout (includes
+	// network latency), unlike mongosh's maxTimeMS which is server-side only.
+	if op.maxTimeMS != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*op.maxTimeMS)*time.Millisecond)
+		defer cancel()
+	}
 
 	cursor, err := collection.Find(ctx, filter, opts)
 	if err != nil {
@@ -152,7 +172,19 @@ func executeAggregate(ctx context.Context, client *mongo.Client, database string
 		pipeline = bson.A{}
 	}
 
-	cursor, err := collection.Aggregate(ctx, pipeline)
+	opts := options.Aggregate()
+	if op.hint != nil {
+		opts.SetHint(op.hint)
+	}
+
+	// Apply maxTimeMS using context timeout (see comment in executeFind for details).
+	if op.maxTimeMS != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*op.maxTimeMS)*time.Millisecond)
+		defer cancel()
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline, opts)
 	if err != nil {
 		return nil, fmt.Errorf("aggregate failed: %w", err)
 	}
@@ -200,6 +232,22 @@ func executeFindOne(ctx context.Context, client *mongo.Client, database string, 
 	}
 	if op.projection != nil {
 		opts.SetProjection(op.projection)
+	}
+	if op.hint != nil {
+		opts.SetHint(op.hint)
+	}
+	if op.max != nil {
+		opts.SetMax(op.max)
+	}
+	if op.min != nil {
+		opts.SetMin(op.min)
+	}
+
+	// Apply maxTimeMS using context timeout (see comment in executeFind for details).
+	if op.maxTimeMS != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*op.maxTimeMS)*time.Millisecond)
+		defer cancel()
 	}
 
 	var doc bson.M
@@ -269,7 +317,15 @@ func executeGetCollectionInfos(ctx context.Context, client *mongo.Client, databa
 		filter = bson.D{}
 	}
 
-	cursor, err := client.Database(database).ListCollections(ctx, filter)
+	opts := options.ListCollections()
+	if op.nameOnly != nil {
+		opts.SetNameOnly(*op.nameOnly)
+	}
+	if op.authorizedCollections != nil {
+		opts.SetAuthorizedCollections(*op.authorizedCollections)
+	}
+
+	cursor, err := client.Database(database).ListCollections(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("list collections failed: %w", err)
 	}
@@ -353,6 +409,13 @@ func executeCountDocuments(ctx context.Context, client *mongo.Client, database s
 		opts.SetSkip(*op.skip)
 	}
 
+	// Apply maxTimeMS using context timeout (see comment in executeFind for details).
+	if op.maxTimeMS != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*op.maxTimeMS)*time.Millisecond)
+		defer cancel()
+	}
+
 	count, err := collection.CountDocuments(ctx, filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("count documents failed: %w", err)
@@ -367,6 +430,13 @@ func executeCountDocuments(ctx context.Context, client *mongo.Client, database s
 // executeEstimatedDocumentCount executes a db.collection.estimatedDocumentCount() command.
 func executeEstimatedDocumentCount(ctx context.Context, client *mongo.Client, database string, op *mongoOperation) (*Result, error) {
 	collection := client.Database(database).Collection(op.collection)
+
+	// Apply maxTimeMS using context timeout (see comment in executeFind for details).
+	if op.maxTimeMS != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*op.maxTimeMS)*time.Millisecond)
+		defer cancel()
+	}
 
 	count, err := collection.EstimatedDocumentCount(ctx)
 	if err != nil {
@@ -386,6 +456,13 @@ func executeDistinct(ctx context.Context, client *mongo.Client, database string,
 	filter := op.filter
 	if filter == nil {
 		filter = bson.D{}
+	}
+
+	// Apply maxTimeMS using context timeout (see comment in executeFind for details).
+	if op.maxTimeMS != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*op.maxTimeMS)*time.Millisecond)
+		defer cancel()
 	}
 
 	result := collection.Distinct(ctx, op.distinctField, filter)
