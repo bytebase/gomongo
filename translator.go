@@ -110,7 +110,6 @@ func (v *mongoShellVisitor) visitShellCommand(ctx mongodb.IShellCommandContext) 
 	default:
 		v.err = &UnsupportedOperationError{
 			Operation: ctx.GetText(),
-			Hint:      "unknown shell command",
 		}
 	}
 }
@@ -451,17 +450,27 @@ func (v *mongoShellVisitor) extractFindFilter(ctx mongodb.IFindMethodContext) {
 		return
 	}
 
-	arg := fm.Argument()
-	if arg == nil {
+	args := fm.Arguments()
+	if args == nil {
 		return
 	}
 
-	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
 	if !ok {
 		return
 	}
 
-	valueCtx := argCtx.Value()
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		return
+	}
+
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := firstArg.Value()
 	if valueCtx == nil {
 		return
 	}
@@ -486,17 +495,27 @@ func (v *mongoShellVisitor) extractFindOneFilter(ctx mongodb.IFindOneMethodConte
 		return
 	}
 
-	arg := fm.Argument()
-	if arg == nil {
+	args := fm.Arguments()
+	if args == nil {
 		return
 	}
 
-	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
 	if !ok {
 		return
 	}
 
-	valueCtx := argCtx.Value()
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		return
+	}
+
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := firstArg.Value()
 	if valueCtx == nil {
 		return
 	}
@@ -601,218 +620,148 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		return
 	}
 
-	// Determine method context for error messages
-	getMethodContext := func() methodContext {
+	// Determine method context for registry lookup
+	getMethodContext := func() string {
 		if v.operation.opType == opFind || v.operation.opType == opFindOne {
-			return contextCursor
+			return "cursor"
 		}
-		return contextCollection
+		return "collection"
 	}
 
+	switch {
 	// Supported read operations
-	if mc.FindMethod() != nil {
+	case mc.FindMethod() != nil:
 		v.operation.opType = opFind
 		v.extractFindFilter(mc.FindMethod())
-	} else if mc.FindOneMethod() != nil {
+	case mc.FindOneMethod() != nil:
 		v.operation.opType = opFindOne
 		v.extractFindOneFilter(mc.FindOneMethod())
-	} else if mc.CountDocumentsMethod() != nil {
+	case mc.CountDocumentsMethod() != nil:
 		v.operation.opType = opCountDocuments
 		v.extractCountDocumentsArgsFromMethod(mc.CountDocumentsMethod())
-	} else if mc.EstimatedDocumentCountMethod() != nil {
+	case mc.EstimatedDocumentCountMethod() != nil:
 		v.operation.opType = opEstimatedDocumentCount
-	} else if mc.DistinctMethod() != nil {
+	case mc.DistinctMethod() != nil:
 		v.operation.opType = opDistinct
 		v.extractDistinctArgsFromMethod(mc.DistinctMethod())
-	} else if mc.AggregateMethod() != nil {
+	case mc.AggregateMethod() != nil:
 		v.operation.opType = opAggregate
 		v.extractAggregationPipelineFromMethod(mc.AggregateMethod())
-	} else if mc.GetIndexesMethod() != nil {
+	case mc.GetIndexesMethod() != nil:
 		v.operation.opType = opGetIndexes
-	} else if mc.SortMethod() != nil {
-		// Supported cursor modifiers
+
+	// Supported cursor modifiers
+	case mc.SortMethod() != nil:
 		v.extractSort(mc.SortMethod())
-	} else if mc.LimitMethod() != nil {
+	case mc.LimitMethod() != nil:
 		v.extractLimit(mc.LimitMethod())
-	} else if mc.SkipMethod() != nil {
+	case mc.SkipMethod() != nil:
 		v.extractSkip(mc.SkipMethod())
-	} else if mc.ProjectionMethod() != nil {
+	case mc.ProjectionMethod() != nil:
 		v.extractProjection(mc.ProjectionMethod())
-	} else if mc.CountMethod() != nil {
-		// Deprecated cursor method
-		v.handleUnsupportedMethod(contextCursor, "count")
-	} else if mc.InsertOneMethod() != nil {
-		// Unsupported write operations
-		v.handleUnsupportedMethod(contextCollection, "insertOne")
-	} else if mc.InsertManyMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "insertMany")
-	} else if mc.UpdateOneMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "updateOne")
-	} else if mc.UpdateManyMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "updateMany")
-	} else if mc.DeleteOneMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "deleteOne")
-	} else if mc.DeleteManyMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "deleteMany")
-	} else if mc.ReplaceOneMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "replaceOne")
-	} else if mc.FindOneAndUpdateMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "findOneAndUpdate")
-	} else if mc.FindOneAndReplaceMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "findOneAndReplace")
-	} else if mc.FindOneAndDeleteMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "findOneAndDelete")
-	} else if mc.CreateIndexMethod() != nil {
-		// Unsupported index operations
-		v.handleUnsupportedMethod(contextCollection, "createIndex")
-	} else if mc.CreateIndexesMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "createIndexes")
-	} else if mc.DropIndexMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "dropIndex")
-	} else if mc.DropIndexesMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "dropIndexes")
-	} else if mc.DropMethod() != nil {
-		// Unsupported collection management
-		v.handleUnsupportedMethod(contextCollection, "drop")
-	} else if mc.RenameCollectionMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "renameCollection")
-	} else if mc.StatsMethod() != nil {
-		// Unsupported stats operations
-		v.handleUnsupportedMethod(contextCollection, "stats")
-	} else if mc.StorageSizeMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "storageSize")
-	} else if mc.TotalIndexSizeMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "totalIndexSize")
-	} else if mc.TotalSizeMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "totalSize")
-	} else if mc.DataSizeMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "dataSize")
-	} else if mc.IsCappedMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "isCapped")
-	} else if mc.ValidateMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "validate")
-	} else if mc.LatencyStatsMethod() != nil {
-		v.handleUnsupportedMethod(contextCollection, "latencyStats")
-	} else if mc.BatchSizeMethod() != nil {
-		// Unsupported cursor methods
-		v.handleUnsupportedMethod(contextCursor, "batchSize")
-	} else if mc.CloseMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "close")
-	} else if mc.CollationMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "collation")
-	} else if mc.CommentMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "comment")
-	} else if mc.ExplainMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "explain")
-	} else if mc.ForEachMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "forEach")
-	} else if mc.HasNextMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "hasNext")
-	} else if mc.HintMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "hint")
-	} else if mc.IsClosedMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "isClosed")
-	} else if mc.IsExhaustedMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "isExhausted")
-	} else if mc.ItcountMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "itcount")
-	} else if mc.MapMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "map")
-	} else if mc.MaxMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "max")
-	} else if mc.MaxAwaitTimeMSMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "maxAwaitTimeMS")
-	} else if mc.MaxTimeMSMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "maxTimeMS")
-	} else if mc.MinMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "min")
-	} else if mc.NextMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "next")
-	} else if mc.NoCursorTimeoutMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "noCursorTimeout")
-	} else if mc.ObjsLeftInBatchMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "objsLeftInBatch")
-	} else if mc.PrettyMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "pretty")
-	} else if mc.ReadConcernMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "readConcern")
-	} else if mc.ReadPrefMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "readPref")
-	} else if mc.ReturnKeyMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "returnKey")
-	} else if mc.ShowRecordIdMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "showRecordId")
-	} else if mc.SizeMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "size")
-	} else if mc.TailableMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "tailable")
-	} else if mc.ToArrayMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "toArray")
-	} else if mc.TryNextMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "tryNext")
-	} else if mc.AllowDiskUseMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "allowDiskUse")
-	} else if mc.AddOptionMethod() != nil {
-		v.handleUnsupportedMethod(contextCursor, "addOption")
-	} else if gm := mc.GenericMethod(); gm != nil {
-		// Fallback for any methods not explicitly handled above
-		gmCtx, ok := gm.(*mongodb.GenericMethodContext)
+
+	// Planned M2 write operations - return PlannedOperationError for fallback
+	case mc.InsertOneMethod() != nil:
+		v.handleUnsupportedMethod("collection", "insertOne")
+	case mc.InsertManyMethod() != nil:
+		v.handleUnsupportedMethod("collection", "insertMany")
+	case mc.UpdateOneMethod() != nil:
+		v.handleUnsupportedMethod("collection", "updateOne")
+	case mc.UpdateManyMethod() != nil:
+		v.handleUnsupportedMethod("collection", "updateMany")
+	case mc.DeleteOneMethod() != nil:
+		v.handleUnsupportedMethod("collection", "deleteOne")
+	case mc.DeleteManyMethod() != nil:
+		v.handleUnsupportedMethod("collection", "deleteMany")
+	case mc.ReplaceOneMethod() != nil:
+		v.handleUnsupportedMethod("collection", "replaceOne")
+	case mc.FindOneAndUpdateMethod() != nil:
+		v.handleUnsupportedMethod("collection", "findOneAndUpdate")
+	case mc.FindOneAndReplaceMethod() != nil:
+		v.handleUnsupportedMethod("collection", "findOneAndReplace")
+	case mc.FindOneAndDeleteMethod() != nil:
+		v.handleUnsupportedMethod("collection", "findOneAndDelete")
+
+	// Planned M3 index operations - return PlannedOperationError for fallback
+	case mc.CreateIndexMethod() != nil:
+		v.handleUnsupportedMethod("collection", "createIndex")
+	case mc.CreateIndexesMethod() != nil:
+		v.handleUnsupportedMethod("collection", "createIndexes")
+	case mc.DropIndexMethod() != nil:
+		v.handleUnsupportedMethod("collection", "dropIndex")
+	case mc.DropIndexesMethod() != nil:
+		v.handleUnsupportedMethod("collection", "dropIndexes")
+
+	// Planned M3 collection management - return PlannedOperationError for fallback
+	case mc.DropMethod() != nil:
+		v.handleUnsupportedMethod("collection", "drop")
+	case mc.RenameCollectionMethod() != nil:
+		v.handleUnsupportedMethod("collection", "renameCollection")
+
+	// Planned M3 stats operations - return PlannedOperationError for fallback
+	case mc.StatsMethod() != nil:
+		v.handleUnsupportedMethod("collection", "stats")
+	case mc.StorageSizeMethod() != nil:
+		v.handleUnsupportedMethod("collection", "storageSize")
+	case mc.TotalIndexSizeMethod() != nil:
+		v.handleUnsupportedMethod("collection", "totalIndexSize")
+	case mc.TotalSizeMethod() != nil:
+		v.handleUnsupportedMethod("collection", "totalSize")
+	case mc.DataSizeMethod() != nil:
+		v.handleUnsupportedMethod("collection", "dataSize")
+	case mc.IsCappedMethod() != nil:
+		v.handleUnsupportedMethod("collection", "isCapped")
+	case mc.ValidateMethod() != nil:
+		v.handleUnsupportedMethod("collection", "validate")
+	case mc.LatencyStatsMethod() != nil:
+		v.handleUnsupportedMethod("collection", "latencyStats")
+
+	// Generic method fallback - all methods going through genericMethod are unsupported
+	case mc.GenericMethod() != nil:
+		gmCtx, ok := mc.GenericMethod().(*mongodb.GenericMethodContext)
 		if !ok {
 			return
 		}
 		methodName := gmCtx.Identifier().GetText()
+		v.handleUnsupportedMethod(getMethodContext(), methodName)
 
-		// Handle supported methods that may come through genericMethod
-		// (e.g., aggregate() with no arguments goes to genericMethod, not aggregateMethod)
-		switch methodName {
-		case "aggregate":
-			v.operation.opType = opAggregate
-			v.extractArgumentsForAggregate(gmCtx.Arguments())
-		case "countDocuments":
-			v.operation.opType = opCountDocuments
-			v.extractArgumentsForCountDocuments(gmCtx.Arguments())
-		case "estimatedDocumentCount":
-			v.operation.opType = opEstimatedDocumentCount
-		case "distinct":
-			v.operation.opType = opDistinct
-			v.extractArgumentsForDistinct(gmCtx.Arguments())
-		case "getIndexes":
-			v.operation.opType = opGetIndexes
-		default:
+	// Default: all other methods not explicitly handled
+	// These go to handleUnsupportedMethod which returns UnsupportedOperationError
+	// since they're not in the planned registry
+	default:
+		// Extract method name from the parse tree for error message
+		methodName := v.extractMethodName(mc)
+		if methodName != "" {
 			v.handleUnsupportedMethod(getMethodContext(), methodName)
 		}
 	}
 }
 
+// extractMethodName extracts the method name from a MethodCallContext for error messages.
+func (v *mongoShellVisitor) extractMethodName(mc *mongodb.MethodCallContext) string {
+	// Try to get method name from various method contexts
+	// The parser creates specific method contexts for known methods
+	// For unknown methods, they go through GenericMethod which is handled separately
+	text := mc.GetText()
+	// Extract method name before the opening parenthesis
+	if idx := strings.Index(text, "("); idx > 0 {
+		return text[:idx]
+	}
+	return text
+}
+
 // handleUnsupportedMethod checks the method registry and returns appropriate errors.
-func (v *mongoShellVisitor) handleUnsupportedMethod(ctx methodContext, methodName string) {
-	info, found := lookupMethod(ctx, methodName)
-	if !found {
-		// Method not in registry - unknown method
-		v.err = &UnsupportedOperationError{
+// If method is in registry (planned for M2/M3) -> PlannedOperationError (fallback to mongosh)
+// If method is NOT in registry -> UnsupportedOperationError (no fallback)
+func (v *mongoShellVisitor) handleUnsupportedMethod(context, methodName string) {
+	if IsPlannedMethod(context, methodName) {
+		v.err = &PlannedOperationError{
 			Operation: methodName + "()",
-			Hint:      "unknown method",
 		}
 		return
 	}
-
-	switch info.status {
-	case statusDeprecated:
-		v.err = &DeprecatedOperationError{
-			Operation:   methodName + "()",
-			Alternative: info.alternative,
-		}
-	case statusUnsupported:
-		v.err = &UnsupportedOperationError{
-			Operation: methodName + "()",
-			Hint:      info.hint,
-		}
-	case statusSupported:
-		// This shouldn't happen - supported methods should be handled explicitly
-		v.err = &UnsupportedOperationError{
-			Operation: methodName + "()",
-			Hint:      "method is supported but not handled",
-		}
+	v.err = &UnsupportedOperationError{
+		Operation: methodName + "()",
 	}
 }
 

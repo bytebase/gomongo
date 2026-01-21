@@ -85,7 +85,6 @@ func executeOperation(ctx context.Context, client *mongo.Client, database string
 	default:
 		return nil, &UnsupportedOperationError{
 			Operation: statement,
-			Hint:      "could not determine operation type",
 		}
 	}
 }
