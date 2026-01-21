@@ -1457,6 +1457,68 @@ func TestGetCollectionInfosEmptyResult(t *testing.T) {
 	require.Empty(t, result.Rows)
 }
 
+func TestGetCollectionInfosNameOnly(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection
+	_, err := client.Database("testdb").Collection("users").InsertOne(ctx, bson.M{"name": "test"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", `db.getCollectionInfos({}, { nameOnly: true })`)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, result.RowCount, 1)
+
+	// With nameOnly: true, the result should contain "name" field
+	require.Contains(t, result.Rows[0], `"name"`)
+}
+
+func TestGetCollectionInfosAuthorizedCollections(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a collection
+	_, err := client.Database("testdb").Collection("users").InsertOne(ctx, bson.M{"name": "test"})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", `db.getCollectionInfos({}, { authorizedCollections: true })`)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, result.RowCount, 1)
+}
+
+func TestGetCollectionInfosUnsupportedOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	_, err := gc.Execute(ctx, "testdb", `db.getCollectionInfos({}, { unknownOption: true })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "getCollectionInfos()", optErr.Method)
+}
+
+func TestGetCollectionInfosTooManyArgs(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	_, err := gc.Execute(ctx, "testdb", `db.getCollectionInfos({}, {}, {})`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "takes at most 2 arguments")
+}
+
 func TestGetIndexes(t *testing.T) {
 	client, cleanup := setupTestContainer(t)
 	defer cleanup()
@@ -1927,4 +1989,538 @@ func TestCursorCountUnsupported(t *testing.T) {
 	var unsupportedErr *gomongo.UnsupportedOperationError
 	require.ErrorAs(t, err, &unsupportedErr)
 	require.Equal(t, "count()", unsupportedErr.Operation)
+}
+
+func TestUnsupportedOptionError(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	// find() with unsupported option 'collation'
+	_, err := gc.Execute(ctx, "testdb", `db.users.find({}, {}, { collation: { locale: "en" } })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "find()", optErr.Method)
+	require.Equal(t, "collation", optErr.Option)
+}
+
+func TestFindWithProjectionArg(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Insert test data
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30, "city": "NYC"},
+		bson.M{"name": "Bob", "age": 25, "city": "LA"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// find with projection as 2nd argument
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}, { name: 1, _id: 0 })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+
+	// Verify only 'name' field is returned
+	for _, row := range result.Rows {
+		require.Contains(t, row, "name")
+		require.NotContains(t, row, "age")
+		require.NotContains(t, row, "city")
+	}
+}
+
+func TestFindWithHintOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+	})
+	require.NoError(t, err)
+
+	// Create index
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "name", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// find with hint option (index name)
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}, {}, { hint: "name_1" })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestFindWithMaxMinOptions(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("items")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"price": 10},
+		bson.M{"price": 20},
+		bson.M{"price": 30},
+		bson.M{"price": 40},
+		bson.M{"price": 50},
+	})
+	require.NoError(t, err)
+
+	// Create index on price field (required for min/max)
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "price", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// find with min and max options (requires hint)
+	result, err := gc.Execute(ctx, "testdb", `db.items.find({}, {}, { hint: { price: 1 }, min: { price: 20 }, max: { price: 40 } })`)
+	require.NoError(t, err)
+	// Should return items with price 20 and 30 (max is exclusive)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestFindWithMaxTimeMSOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice"},
+		bson.M{"name": "Bob"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// find with maxTimeMS option
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}, {}, { maxTimeMS: 5000 })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestFindOneWithProjectionAndOptions(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30, "city": "NYC"},
+		bson.M{"name": "Bob", "age": 25, "city": "LA"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// findOne with projection as 2nd argument
+	result, err := gc.Execute(ctx, "testdb", `db.users.findOne({}, { name: 1, _id: 0 })`)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RowCount)
+	require.Contains(t, result.Rows[0], "name")
+	require.NotContains(t, result.Rows[0], "age")
+}
+
+func TestFindOneUnsupportedOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	_, err := gc.Execute(ctx, "testdb", `db.users.findOne({}, {}, { collation: { locale: "en" } })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "findOne()", optErr.Method)
+	require.Equal(t, "collation", optErr.Option)
+}
+
+func TestFindOneWithHintOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+	})
+	require.NoError(t, err)
+
+	// Create index
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "name", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// findOne with hint option (index name)
+	result, err := gc.Execute(ctx, "testdb", `db.users.findOne({}, {}, { hint: "name_1" })`)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RowCount)
+}
+
+func TestFindOneWithMaxTimeMSOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice"},
+		bson.M{"name": "Bob"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// findOne with maxTimeMS option
+	result, err := gc.Execute(ctx, "testdb", `db.users.findOne({}, {}, { maxTimeMS: 5000 })`)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RowCount)
+}
+
+func TestAggregateWithOptions(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// aggregate with maxTimeMS option
+	result, err := gc.Execute(ctx, "testdb", `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { maxTimeMS: 5000 })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestAggregateWithHintOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+	})
+	require.NoError(t, err)
+
+	// Create index on age field
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "age", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// aggregate with hint option (index name)
+	result, err := gc.Execute(ctx, "testdb", `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: "age_1" })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+
+	// aggregate with hint option (index spec)
+	result, err = gc.Execute(ctx, "testdb", `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: { age: 1 } })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestAggregateUnsupportedOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	_, err := gc.Execute(ctx, "testdb", `db.users.aggregate([], { allowDiskUse: true })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "aggregate()", optErr.Method)
+	require.Equal(t, "allowDiskUse", optErr.Option)
+}
+
+func TestAggregateTooManyArguments(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	_, err := gc.Execute(ctx, "testdb", `db.users.aggregate([], {}, "extra")`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "aggregate() takes at most 2 arguments")
+}
+
+func TestCountDocumentsMaxTimeMS(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice"},
+		bson.M{"name": "Bob"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", `db.users.countDocuments({}, { maxTimeMS: 5000 })`)
+	require.NoError(t, err)
+	require.Equal(t, "2", result.Rows[0])
+}
+
+func TestCountDocumentsUnsupportedOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	_, err := gc.Execute(ctx, "testdb", `db.users.countDocuments({}, { collation: { locale: "en" } })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "countDocuments()", optErr.Method)
+}
+
+func TestDistinctMaxTimeMS(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "city": "NYC"},
+		bson.M{"name": "Bob", "city": "LA"},
+		bson.M{"name": "Charlie", "city": "NYC"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", `db.users.distinct("city", {}, { maxTimeMS: 5000 })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestDistinctUnsupportedOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	_, err := gc.Execute(ctx, "testdb", `db.users.distinct("city", {}, { collation: { locale: "en" } })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "distinct()", optErr.Method)
+}
+
+func TestEstimatedDocumentCountMaxTimeMS(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice"},
+		bson.M{"name": "Bob"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	result, err := gc.Execute(ctx, "testdb", `db.users.estimatedDocumentCount({ maxTimeMS: 5000 })`)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RowCount)
+	require.Equal(t, "2", result.Rows[0])
+}
+
+func TestEstimatedDocumentCountUnsupportedOption(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	_, err := gc.Execute(ctx, "testdb", `db.users.estimatedDocumentCount({ comment: "test" })`)
+	var optErr *gomongo.UnsupportedOptionError
+	require.ErrorAs(t, err, &optErr)
+	require.Equal(t, "estimatedDocumentCount()", optErr.Method)
+	require.Equal(t, "comment", optErr.Option)
+}
+
+func TestCursorHintMethod(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+	})
+	require.NoError(t, err)
+
+	// Create index
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "name", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	// Use hint() cursor method with string
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}).hint("name_1")`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestCursorHintMethodWithDocument(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+	})
+	require.NoError(t, err)
+
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "name", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	// Use hint() cursor method with document
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}).hint({ name: 1 })`)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RowCount)
+}
+
+func TestCursorMaxMethod(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+		bson.M{"name": "Carol", "age": 35},
+	})
+	require.NoError(t, err)
+
+	// Create index on age for max() to work
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "age", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	// Use max() cursor method - returns documents with age < 30
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}).hint({ age: 1 }).max({ age: 30 })`)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RowCount)
+	require.Contains(t, result.Rows[0], `"Bob"`)
+}
+
+func TestCursorMinMethod(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+		bson.M{"name": "Carol", "age": 35},
+	})
+	require.NoError(t, err)
+
+	// Create index on age for min() to work
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "age", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	// Use min() cursor method - returns documents with age >= 30
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}).hint({ age: 1 }).min({ age: 30 })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
+}
+
+func TestCursorMinMaxCombined(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	gc := gomongo.NewClient(client)
+
+	coll := client.Database("testdb").Collection("users")
+	_, err := coll.InsertMany(ctx, []any{
+		bson.M{"name": "Alice", "age": 30},
+		bson.M{"name": "Bob", "age": 25},
+		bson.M{"name": "Carol", "age": 35},
+		bson.M{"name": "Dave", "age": 40},
+	})
+	require.NoError(t, err)
+
+	// Create index on age
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "age", Value: 1}},
+	})
+	require.NoError(t, err)
+
+	// Use min() and max() together - returns documents with 30 <= age < 40
+	result, err := gc.Execute(ctx, "testdb", `db.users.find({}).hint({ age: 1 }).min({ age: 30 }).max({ age: 40 })`)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.RowCount)
 }

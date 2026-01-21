@@ -51,10 +51,10 @@ var methodRegistry = map[string]methodInfo{
 	"collection:dropIndexes":   {status: statusPlanned},
 
 	// Collection Management (4)
-	"database:createCollection":       {status: statusPlanned},
-	"collection:drop":                 {status: statusPlanned},
-	"collection:renameCollection":     {status: statusPlanned},
-	"database:dropDatabase":           {status: statusPlanned},
+	"database:createCollection":   {status: statusPlanned},
+	"collection:drop":             {status: statusPlanned},
+	"collection:renameCollection": {status: statusPlanned},
+	"database:dropDatabase":       {status: statusPlanned},
 
 	// Database Information (7)
 	"database:stats":           {status: statusPlanned},

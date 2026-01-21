@@ -37,12 +37,18 @@ type mongoOperation struct {
 	limit      *int64
 	skip       *int64
 	projection bson.D
+	// Index scan bounds and query options
+	hint      any    // string (index name) or document (index spec)
+	max       bson.D // upper bound for index scan
+	min       bson.D // lower bound for index scan
+	maxTimeMS *int64 // max execution time in milliseconds
 	// Aggregation pipeline
 	pipeline bson.A
-	// countDocuments options
-	hint any // string (index name) or document (index spec)
 	// distinct field name
 	distinctField string
+	// getCollectionInfos options
+	nameOnly              *bool
+	authorizedCollections *bool
 }
 
 // mongoShellVisitor extracts operations from a parse tree.
@@ -177,6 +183,61 @@ func (v *mongoShellVisitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollec
 		return
 	}
 	v.operation.filter = filter
+
+	// Second argument is the options (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("getCollectionInfos() options must be a document")
+			return
+		}
+
+		optionsDoc, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range optionsDoc {
+			switch opt.Key {
+			case "nameOnly":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.nameOnly = &val
+				} else {
+					v.err = fmt.Errorf("getCollectionInfos() nameOnly must be a boolean")
+					return
+				}
+			case "authorizedCollections":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.authorizedCollections = &val
+				} else {
+					v.err = fmt.Errorf("getCollectionInfos() authorizedCollections must be a boolean")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "getCollectionInfos()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("getCollectionInfos() takes at most 2 arguments")
+		return
+	}
 }
 
 // extractCountDocumentsArgsFromMethod extracts arguments from CountDocumentsMethodContext.
@@ -255,7 +316,7 @@ func (v *mongoShellVisitor) extractArgumentsForCountDocuments(args mongodb.IArgu
 		return
 	}
 
-	// Extract supported options: hint, limit, skip
+	// Extract supported options: hint, limit, skip, maxTimeMS
 	for _, elem := range optionsDoc {
 		switch elem.Key {
 		case "hint":
@@ -274,6 +335,79 @@ func (v *mongoShellVisitor) extractArgumentsForCountDocuments(args mongodb.IArgu
 			} else if val, ok := elem.Value.(int64); ok {
 				v.operation.skip = &val
 			}
+		case "maxTimeMS":
+			if val, ok := elem.Value.(int32); ok {
+				ms := int64(val)
+				v.operation.maxTimeMS = &ms
+			} else if val, ok := elem.Value.(int64); ok {
+				v.operation.maxTimeMS = &val
+			} else {
+				v.err = fmt.Errorf("countDocuments() maxTimeMS must be a number")
+				return
+			}
+		default:
+			v.err = &UnsupportedOptionError{
+				Method: "countDocuments()",
+				Option: elem.Key,
+			}
+			return
+		}
+	}
+}
+
+// extractEstimatedDocumentCountArgs extracts arguments from EstimatedDocumentCountMethodContext.
+func (v *mongoShellVisitor) extractEstimatedDocumentCountArgs(ctx mongodb.IEstimatedDocumentCountMethodContext) {
+	method, ok := ctx.(*mongodb.EstimatedDocumentCountMethodContext)
+	if !ok {
+		return
+	}
+
+	// EstimatedDocumentCountMethodContext has Argument() (singular) that returns a single optional argument
+	arg := method.Argument()
+	if arg == nil {
+		return
+	}
+
+	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := argCtx.Value()
+	if valueCtx == nil {
+		return
+	}
+
+	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("estimatedDocumentCount() options must be a document")
+		return
+	}
+
+	options, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid options: %w", err)
+		return
+	}
+
+	for _, opt := range options {
+		switch opt.Key {
+		case "maxTimeMS":
+			if val, ok := opt.Value.(int32); ok {
+				ms := int64(val)
+				v.operation.maxTimeMS = &ms
+			} else if val, ok := opt.Value.(int64); ok {
+				v.operation.maxTimeMS = &val
+			} else {
+				v.err = fmt.Errorf("estimatedDocumentCount() maxTimeMS must be a number")
+				return
+			}
+		default:
+			v.err = &UnsupportedOptionError{
+				Method: "estimatedDocumentCount()",
+				Option: opt.Key,
+			}
+			return
 		}
 	}
 }
@@ -360,6 +494,57 @@ func (v *mongoShellVisitor) extractArgumentsForDistinct(args mongodb.IArgumentsC
 		return
 	}
 	v.operation.filter = filter
+
+	// Third argument: options (optional)
+	if len(allArgs) >= 3 {
+		thirdArg, ok := allArgs[2].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := thirdArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		docValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("distinct() options must be a document")
+			return
+		}
+
+		options, err := convertDocument(docValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "maxTimeMS":
+				if val, ok := opt.Value.(int32); ok {
+					ms := int64(val)
+					v.operation.maxTimeMS = &ms
+				} else if val, ok := opt.Value.(int64); ok {
+					v.operation.maxTimeMS = &val
+				} else {
+					v.err = fmt.Errorf("distinct() maxTimeMS must be a number")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "distinct()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 3 {
+		v.err = fmt.Errorf("distinct() takes at most 3 arguments")
+		return
+	}
 }
 
 // extractAggregationPipelineFromMethod extracts pipeline from AggregateMethodContext.
@@ -417,6 +602,56 @@ func (v *mongoShellVisitor) extractArgumentsForAggregate(args mongodb.IArguments
 	}
 
 	v.operation.pipeline = pipeline
+
+	// Second argument: options (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+		docValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("aggregate() options must be a document")
+			return
+		}
+		options, err := convertDocument(docValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+		for _, opt := range options {
+			switch opt.Key {
+			case "hint":
+				v.operation.hint = opt.Value
+			case "maxTimeMS":
+				if val, ok := opt.Value.(int32); ok {
+					ms := int64(val)
+					v.operation.maxTimeMS = &ms
+				} else if val, ok := opt.Value.(int64); ok {
+					v.operation.maxTimeMS = &val
+				} else {
+					v.err = fmt.Errorf("aggregate() maxTimeMS must be a number")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "aggregate()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	// More than 2 arguments is an error
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("aggregate() takes at most 2 arguments")
+		return
+	}
 }
 
 func (v *mongoShellVisitor) extractCollectionName(ctx mongodb.ICollectionAccessContext) string {
@@ -444,7 +679,7 @@ func (v *mongoShellVisitor) visitMethodChain(ctx mongodb.IMethodChainContext) {
 	}
 }
 
-func (v *mongoShellVisitor) extractFindFilter(ctx mongodb.IFindMethodContext) {
+func (v *mongoShellVisitor) extractFindArgs(ctx mongodb.IFindMethodContext) {
 	fm, ok := ctx.(*mongodb.FindMethodContext)
 	if !ok {
 		return
@@ -465,31 +700,114 @@ func (v *mongoShellVisitor) extractFindFilter(ctx mongodb.IFindMethodContext) {
 		return
 	}
 
+	// First argument: filter
 	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
 	if !ok {
 		return
 	}
-
 	valueCtx := firstArg.Value()
-	if valueCtx == nil {
-		return
+	if valueCtx != nil {
+		docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("find() filter must be a document")
+			return
+		}
+		filter, err := convertDocument(docValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid filter: %w", err)
+			return
+		}
+		v.operation.filter = filter
 	}
 
-	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
-	if !ok {
-		v.err = fmt.Errorf("find() filter must be a document")
-		return
+	// Second argument: projection (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+		valueCtx := secondArg.Value()
+		if valueCtx != nil {
+			docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+			if !ok {
+				v.err = fmt.Errorf("find() projection must be a document")
+				return
+			}
+			projection, err := convertDocument(docValue.Document())
+			if err != nil {
+				v.err = fmt.Errorf("invalid projection: %w", err)
+				return
+			}
+			v.operation.projection = projection
+		}
 	}
 
-	filter, err := convertDocument(docValue.Document())
-	if err != nil {
-		v.err = fmt.Errorf("invalid filter: %w", err)
+	// Third argument: options (optional)
+	if len(allArgs) >= 3 {
+		thirdArg, ok := allArgs[2].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+		valueCtx := thirdArg.Value()
+		if valueCtx != nil {
+			docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+			if !ok {
+				v.err = fmt.Errorf("find() options must be a document")
+				return
+			}
+			options, err := convertDocument(docValue.Document())
+			if err != nil {
+				v.err = fmt.Errorf("invalid options: %w", err)
+				return
+			}
+			// Validate and extract supported options
+			for _, opt := range options {
+				switch opt.Key {
+				case "hint":
+					v.operation.hint = opt.Value
+				case "max":
+					if doc, ok := opt.Value.(bson.D); ok {
+						v.operation.max = doc
+					} else {
+						v.err = fmt.Errorf("find() max must be a document")
+						return
+					}
+				case "min":
+					if doc, ok := opt.Value.(bson.D); ok {
+						v.operation.min = doc
+					} else {
+						v.err = fmt.Errorf("find() min must be a document")
+						return
+					}
+				case "maxTimeMS":
+					if val, ok := opt.Value.(int32); ok {
+						ms := int64(val)
+						v.operation.maxTimeMS = &ms
+					} else if val, ok := opt.Value.(int64); ok {
+						v.operation.maxTimeMS = &val
+					} else {
+						v.err = fmt.Errorf("find() maxTimeMS must be a number")
+						return
+					}
+				default:
+					v.err = &UnsupportedOptionError{
+						Method: "find()",
+						Option: opt.Key,
+					}
+					return
+				}
+			}
+		}
+	}
+
+	// More than 3 arguments is an error
+	if len(allArgs) > 3 {
+		v.err = fmt.Errorf("find() takes at most 3 arguments")
 		return
 	}
-	v.operation.filter = filter
 }
 
-func (v *mongoShellVisitor) extractFindOneFilter(ctx mongodb.IFindOneMethodContext) {
+func (v *mongoShellVisitor) extractFindOneArgs(ctx mongodb.IFindOneMethodContext) {
 	fm, ok := ctx.(*mongodb.FindOneMethodContext)
 	if !ok {
 		return
@@ -510,28 +828,111 @@ func (v *mongoShellVisitor) extractFindOneFilter(ctx mongodb.IFindOneMethodConte
 		return
 	}
 
+	// First argument: filter
 	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
 	if !ok {
 		return
 	}
-
 	valueCtx := firstArg.Value()
-	if valueCtx == nil {
-		return
+	if valueCtx != nil {
+		docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("findOne() filter must be a document")
+			return
+		}
+		filter, err := convertDocument(docValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid filter: %w", err)
+			return
+		}
+		v.operation.filter = filter
 	}
 
-	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
-	if !ok {
-		v.err = fmt.Errorf("findOne() filter must be a document")
-		return
+	// Second argument: projection (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+		valueCtx := secondArg.Value()
+		if valueCtx != nil {
+			docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+			if !ok {
+				v.err = fmt.Errorf("findOne() projection must be a document")
+				return
+			}
+			projection, err := convertDocument(docValue.Document())
+			if err != nil {
+				v.err = fmt.Errorf("invalid projection: %w", err)
+				return
+			}
+			v.operation.projection = projection
+		}
 	}
 
-	filter, err := convertDocument(docValue.Document())
-	if err != nil {
-		v.err = fmt.Errorf("invalid filter: %w", err)
+	// Third argument: options (optional)
+	if len(allArgs) >= 3 {
+		thirdArg, ok := allArgs[2].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+		valueCtx := thirdArg.Value()
+		if valueCtx != nil {
+			docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+			if !ok {
+				v.err = fmt.Errorf("findOne() options must be a document")
+				return
+			}
+			options, err := convertDocument(docValue.Document())
+			if err != nil {
+				v.err = fmt.Errorf("invalid options: %w", err)
+				return
+			}
+			// Validate and extract supported options
+			for _, opt := range options {
+				switch opt.Key {
+				case "hint":
+					v.operation.hint = opt.Value
+				case "max":
+					if doc, ok := opt.Value.(bson.D); ok {
+						v.operation.max = doc
+					} else {
+						v.err = fmt.Errorf("findOne() max must be a document")
+						return
+					}
+				case "min":
+					if doc, ok := opt.Value.(bson.D); ok {
+						v.operation.min = doc
+					} else {
+						v.err = fmt.Errorf("findOne() min must be a document")
+						return
+					}
+				case "maxTimeMS":
+					if val, ok := opt.Value.(int32); ok {
+						ms := int64(val)
+						v.operation.maxTimeMS = &ms
+					} else if val, ok := opt.Value.(int64); ok {
+						v.operation.maxTimeMS = &val
+					} else {
+						v.err = fmt.Errorf("findOne() maxTimeMS must be a number")
+						return
+					}
+				default:
+					v.err = &UnsupportedOptionError{
+						Method: "findOne()",
+						Option: opt.Key,
+					}
+					return
+				}
+			}
+		}
+	}
+
+	// More than 3 arguments is an error
+	if len(allArgs) > 3 {
+		v.err = fmt.Errorf("findOne() takes at most 3 arguments")
 		return
 	}
-	v.operation.filter = filter
 }
 
 func (v *mongoShellVisitor) extractSort(ctx mongodb.ISortMethodContext) {
@@ -614,6 +1015,89 @@ func (v *mongoShellVisitor) extractProjection(ctx mongodb.IProjectionMethodConte
 	v.operation.projection = projection
 }
 
+func (v *mongoShellVisitor) extractHint(ctx mongodb.IHintMethodContext) {
+	hm, ok := ctx.(*mongodb.HintMethodContext)
+	if !ok {
+		return
+	}
+
+	arg := hm.Argument()
+	if arg == nil {
+		v.err = fmt.Errorf("hint() requires an argument")
+		return
+	}
+
+	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := argCtx.Value()
+	if valueCtx == nil {
+		return
+	}
+
+	// hint can be a string (index name) or document (index spec)
+	switch val := valueCtx.(type) {
+	case *mongodb.LiteralValueContext:
+		strLit, ok := val.Literal().(*mongodb.StringLiteralValueContext)
+		if !ok {
+			v.err = fmt.Errorf("hint() argument must be a string or document")
+			return
+		}
+		v.operation.hint = unquoteString(strLit.StringLiteral().GetText())
+	case *mongodb.DocumentValueContext:
+		doc, err := convertDocument(val.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid hint: %w", err)
+			return
+		}
+		v.operation.hint = doc
+	default:
+		v.err = fmt.Errorf("hint() argument must be a string or document")
+	}
+}
+
+func (v *mongoShellVisitor) extractMax(ctx mongodb.IMaxMethodContext) {
+	mm, ok := ctx.(*mongodb.MaxMethodContext)
+	if !ok {
+		return
+	}
+
+	doc := mm.Document()
+	if doc == nil {
+		v.err = fmt.Errorf("max() requires a document argument")
+		return
+	}
+
+	maxDoc, err := convertDocument(doc)
+	if err != nil {
+		v.err = fmt.Errorf("invalid max: %w", err)
+		return
+	}
+	v.operation.max = maxDoc
+}
+
+func (v *mongoShellVisitor) extractMin(ctx mongodb.IMinMethodContext) {
+	mm, ok := ctx.(*mongodb.MinMethodContext)
+	if !ok {
+		return
+	}
+
+	doc := mm.Document()
+	if doc == nil {
+		v.err = fmt.Errorf("min() requires a document argument")
+		return
+	}
+
+	minDoc, err := convertDocument(doc)
+	if err != nil {
+		v.err = fmt.Errorf("invalid min: %w", err)
+		return
+	}
+	v.operation.min = minDoc
+}
+
 func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	mc, ok := ctx.(*mongodb.MethodCallContext)
 	if !ok {
@@ -632,15 +1116,16 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	// Supported read operations
 	case mc.FindMethod() != nil:
 		v.operation.opType = opFind
-		v.extractFindFilter(mc.FindMethod())
+		v.extractFindArgs(mc.FindMethod())
 	case mc.FindOneMethod() != nil:
 		v.operation.opType = opFindOne
-		v.extractFindOneFilter(mc.FindOneMethod())
+		v.extractFindOneArgs(mc.FindOneMethod())
 	case mc.CountDocumentsMethod() != nil:
 		v.operation.opType = opCountDocuments
 		v.extractCountDocumentsArgsFromMethod(mc.CountDocumentsMethod())
 	case mc.EstimatedDocumentCountMethod() != nil:
 		v.operation.opType = opEstimatedDocumentCount
+		v.extractEstimatedDocumentCountArgs(mc.EstimatedDocumentCountMethod())
 	case mc.DistinctMethod() != nil:
 		v.operation.opType = opDistinct
 		v.extractDistinctArgsFromMethod(mc.DistinctMethod())
@@ -659,6 +1144,12 @@ func (v *mongoShellVisitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		v.extractSkip(mc.SkipMethod())
 	case mc.ProjectionMethod() != nil:
 		v.extractProjection(mc.ProjectionMethod())
+	case mc.HintMethod() != nil:
+		v.extractHint(mc.HintMethod())
+	case mc.MaxMethod() != nil:
+		v.extractMax(mc.MaxMethod())
+	case mc.MinMethod() != nil:
+		v.extractMin(mc.MinMethod())
 
 	// Planned M2 write operations - return PlannedOperationError for fallback
 	case mc.InsertOneMethod() != nil:
