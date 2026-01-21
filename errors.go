@@ -19,24 +19,21 @@ func (e *ParseError) Error() string {
 }
 
 // UnsupportedOperationError represents an unsupported operation.
+// This is returned for operations that are not planned for implementation.
 type UnsupportedOperationError struct {
 	Operation string
-	Hint      string
 }
 
 func (e *UnsupportedOperationError) Error() string {
-	if e.Hint != "" {
-		return fmt.Sprintf("unsupported operation %q: %s", e.Operation, e.Hint)
-	}
-	return fmt.Sprintf("unsupported operation %q", e.Operation)
+	return fmt.Sprintf("unsupported operation: %s", e.Operation)
 }
 
-// DeprecatedOperationError represents a deprecated operation with alternatives.
-type DeprecatedOperationError struct {
-	Operation   string
-	Alternative string
+// PlannedOperationError represents an operation that is planned but not yet implemented.
+// When the caller receives this error, it should fallback to mongosh.
+type PlannedOperationError struct {
+	Operation string
 }
 
-func (e *DeprecatedOperationError) Error() string {
-	return fmt.Sprintf("%s is deprecated. Use %s instead", e.Operation, e.Alternative)
+func (e *PlannedOperationError) Error() string {
+	return fmt.Sprintf("operation %s is not yet implemented", e.Operation)
 }

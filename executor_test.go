@@ -284,6 +284,22 @@ func TestParseError(t *testing.T) {
 	require.ErrorAs(t, err, &parseErr)
 }
 
+func TestPlannedOperation(t *testing.T) {
+	client, cleanup := setupTestContainer(t)
+	defer cleanup()
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	// insertOne is a planned M2 operation - should return PlannedOperationError
+	_, err := gc.Execute(ctx, "testdb", "db.users.insertOne({ name: 'test' })")
+	require.Error(t, err)
+
+	var plannedErr *gomongo.PlannedOperationError
+	require.ErrorAs(t, err, &plannedErr)
+	require.Equal(t, "insertOne()", plannedErr.Operation)
+}
+
 func TestUnsupportedOperation(t *testing.T) {
 	client, cleanup := setupTestContainer(t)
 	defer cleanup()
@@ -291,41 +307,23 @@ func TestUnsupportedOperation(t *testing.T) {
 	gc := gomongo.NewClient(client)
 	ctx := context.Background()
 
-	_, err := gc.Execute(ctx, "testdb", "db.users.insertOne({ name: 'test' })")
-	require.Error(t, err)
-
-	var unsupportedErr *gomongo.UnsupportedOperationError
-	require.ErrorAs(t, err, &unsupportedErr)
-	require.Equal(t, "insertOne()", unsupportedErr.Operation)
-}
-
-func TestUnsupportedAtlasSearchIndex(t *testing.T) {
-	client, cleanup := setupTestContainer(t)
-	defer cleanup()
-
-	gc := gomongo.NewClient(client)
-	ctx := context.Background()
-
-	// Test createSearchIndex
+	// createSearchIndex is NOT in the registry - should return UnsupportedOperationError
 	_, err := gc.Execute(ctx, "testdb", `db.movies.createSearchIndex({ name: "default", definition: { mappings: { dynamic: true } } })`)
 	require.Error(t, err)
 
 	var unsupportedErr *gomongo.UnsupportedOperationError
 	require.ErrorAs(t, err, &unsupportedErr)
 	require.Equal(t, "createSearchIndex()", unsupportedErr.Operation)
-	require.Contains(t, unsupportedErr.Hint, "Atlas Search Index")
 }
 
 func TestMethodRegistryStats(t *testing.T) {
-	total, deprecated, unsupported := gomongo.MethodRegistryStats()
+	total := gomongo.MethodRegistryStats()
 
-	// Verify we have a reasonable number of methods registered
-	require.GreaterOrEqual(t, total, 100, "expected at least 100 methods in registry")
-	require.GreaterOrEqual(t, deprecated, 20, "expected at least 20 deprecated methods")
-	require.GreaterOrEqual(t, unsupported, 80, "expected at least 80 unsupported methods")
+	// Registry should contain M2 (10) + M3 (22) = 32 planned methods
+	require.Equal(t, 32, total, "expected 32 planned methods in registry (M2: 10, M3: 22)")
 
 	// Log stats for visibility
-	t.Logf("Method Registry Stats: total=%d, deprecated=%d, unsupported=%d", total, deprecated, unsupported)
+	t.Logf("Method Registry Stats: total=%d planned methods", total)
 }
 
 func TestFindWithFilter(t *testing.T) {
@@ -1914,7 +1912,7 @@ func TestDistinctNumericValues(t *testing.T) {
 	require.Equal(t, 3, result.RowCount) // 100, 85, 90
 }
 
-func TestCursorCountDeprecated(t *testing.T) {
+func TestCursorCountUnsupported(t *testing.T) {
 	client, cleanup := setupTestContainer(t)
 	defer cleanup()
 
@@ -1922,10 +1920,11 @@ func TestCursorCountDeprecated(t *testing.T) {
 
 	gc := gomongo.NewClient(client)
 
-	// cursor.count() is deprecated and should return an error
+	// cursor.count() is not in the planned registry, should return UnsupportedOperationError
 	_, err := gc.Execute(ctx, "testdb", "db.users.find().count()")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "count()")
-	require.Contains(t, err.Error(), "countDocuments()")
-	require.Contains(t, err.Error(), "estimatedDocumentCount()")
+
+	var unsupportedErr *gomongo.UnsupportedOperationError
+	require.ErrorAs(t, err, &unsupportedErr)
+	require.Equal(t, "count()", unsupportedErr.Operation)
 }
