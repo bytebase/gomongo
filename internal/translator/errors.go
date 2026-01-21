@@ -1,10 +1,6 @@
-package gomongo
+package translator
 
-import (
-	"fmt"
-
-	"github.com/bytebase/gomongo/internal/translator"
-)
+import "fmt"
 
 // ParseError represents a syntax error during parsing.
 type ParseError struct {
@@ -50,14 +46,4 @@ type UnsupportedOptionError struct {
 
 func (e *UnsupportedOptionError) Error() string {
 	return fmt.Sprintf("unsupported option '%s' in %s", e.Option, e.Method)
-}
-
-// MethodRegistryStats returns statistics about the method registry.
-func MethodRegistryStats() int {
-	return translator.MethodRegistryStats()
-}
-
-// IsPlannedMethod checks if a method is planned for future implementation.
-func IsPlannedMethod(context, methodName string) bool {
-	return translator.IsPlannedMethod(context, methodName)
 }
