@@ -1,4 +1,4 @@
-package gomongo
+package translator
 
 import (
 	"encoding/hex"
@@ -10,6 +10,44 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
+
+// convertHelperFunction converts a helper function to a BSON value.
+func convertHelperFunction(ctx mongodb.IHelperFunctionContext) (any, error) {
+	helper, ok := ctx.(*mongodb.HelperFunctionContext)
+	if !ok {
+		return nil, fmt.Errorf("invalid helper function context")
+	}
+
+	if helper.ObjectIdHelper() != nil {
+		return convertObjectIdHelper(helper.ObjectIdHelper())
+	}
+	if helper.IsoDateHelper() != nil {
+		return convertIsoDateHelper(helper.IsoDateHelper())
+	}
+	if helper.DateHelper() != nil {
+		return convertDateHelper(helper.DateHelper())
+	}
+	if helper.UuidHelper() != nil {
+		return convertUuidHelper(helper.UuidHelper())
+	}
+	if helper.LongHelper() != nil {
+		return convertLongHelper(helper.LongHelper())
+	}
+	if helper.Int32Helper() != nil {
+		return convertInt32Helper(helper.Int32Helper())
+	}
+	if helper.DoubleHelper() != nil {
+		return convertDoubleHelper(helper.DoubleHelper())
+	}
+	if helper.Decimal128Helper() != nil {
+		return convertDecimal128Helper(helper.Decimal128Helper())
+	}
+	if helper.TimestampHelper() != nil {
+		return convertTimestampHelper(helper.TimestampHelper())
+	}
+
+	return nil, fmt.Errorf("unsupported helper function")
+}
 
 // convertObjectIdHelper converts ObjectId("hex") to primitive.ObjectID.
 func convertObjectIdHelper(ctx mongodb.IObjectIdHelperContext) (bson.ObjectID, error) {
