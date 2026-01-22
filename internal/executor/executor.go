@@ -16,10 +16,10 @@ type Result struct {
 }
 
 // Execute executes a parsed operation against MongoDB.
-func Execute(ctx context.Context, client *mongo.Client, database string, op *translator.Operation, statement string) (*Result, error) {
+func Execute(ctx context.Context, client *mongo.Client, database string, op *translator.Operation, statement string, maxRows *int64) (*Result, error) {
 	switch op.OpType {
 	case translator.OpFind:
-		return executeFind(ctx, client, database, op)
+		return executeFind(ctx, client, database, op, maxRows)
 	case translator.OpFindOne:
 		return executeFindOne(ctx, client, database, op)
 	case translator.OpAggregate:
@@ -35,7 +35,7 @@ func Execute(ctx context.Context, client *mongo.Client, database string, op *tra
 	case translator.OpGetIndexes:
 		return executeGetIndexes(ctx, client, database, op)
 	case translator.OpCountDocuments:
-		return executeCountDocuments(ctx, client, database, op)
+		return executeCountDocuments(ctx, client, database, op, maxRows)
 	case translator.OpEstimatedDocumentCount:
 		return executeEstimatedDocumentCount(ctx, client, database, op)
 	case translator.OpDistinct:
