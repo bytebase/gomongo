@@ -9,7 +9,7 @@ import (
 )
 
 // execute parses and executes a MongoDB shell statement.
-func execute(ctx context.Context, client *mongo.Client, database, statement string) (*Result, error) {
+func execute(ctx context.Context, client *mongo.Client, database, statement string, maxRows *int64) (*Result, error) {
 	op, err := translator.Parse(statement)
 	if err != nil {
 		// Convert internal errors to public errors
@@ -33,7 +33,7 @@ func execute(ctx context.Context, client *mongo.Client, database, statement stri
 		}
 	}
 
-	result, err := executor.Execute(ctx, client, database, op, statement)
+	result, err := executor.Execute(ctx, client, database, op, statement, maxRows)
 	if err != nil {
 		return nil, err
 	}

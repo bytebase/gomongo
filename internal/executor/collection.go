@@ -12,8 +12,27 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// computeEffectiveLimit returns the minimum of opLimit and maxRows.
+// Returns nil if both are nil.
+func computeEffectiveLimit(opLimit, maxRows *int64) *int64 {
+	if opLimit == nil && maxRows == nil {
+		return nil
+	}
+	if opLimit == nil {
+		return maxRows
+	}
+	if maxRows == nil {
+		return opLimit
+	}
+	// Both are non-nil, return the minimum
+	if *opLimit < *maxRows {
+		return opLimit
+	}
+	return maxRows
+}
+
 // executeFind executes a find operation.
-func executeFind(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+func executeFind(ctx context.Context, client *mongo.Client, database string, op *translator.Operation, maxRows *int64) (*Result, error) {
 	collection := client.Database(database).Collection(op.Collection)
 
 	filter := op.Filter
@@ -25,8 +44,10 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 	if op.Sort != nil {
 		opts.SetSort(op.Sort)
 	}
-	if op.Limit != nil {
-		opts.SetLimit(*op.Limit)
+	// Compute effective limit: min(op.Limit, maxRows)
+	effectiveLimit := computeEffectiveLimit(op.Limit, maxRows)
+	if effectiveLimit != nil {
+		opts.SetLimit(*effectiveLimit)
 	}
 	if op.Skip != nil {
 		opts.SetSkip(*op.Skip)
@@ -230,7 +251,7 @@ func executeGetIndexes(ctx context.Context, client *mongo.Client, database strin
 }
 
 // executeCountDocuments executes a db.collection.countDocuments() command.
-func executeCountDocuments(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+func executeCountDocuments(ctx context.Context, client *mongo.Client, database string, op *translator.Operation, maxRows *int64) (*Result, error) {
 	collection := client.Database(database).Collection(op.Collection)
 
 	filter := op.Filter
@@ -242,8 +263,10 @@ func executeCountDocuments(ctx context.Context, client *mongo.Client, database s
 	if op.Hint != nil {
 		opts.SetHint(op.Hint)
 	}
-	if op.Limit != nil {
-		opts.SetLimit(*op.Limit)
+	// Compute effective limit: min(op.Limit, maxRows)
+	effectiveLimit := computeEffectiveLimit(op.Limit, maxRows)
+	if effectiveLimit != nil {
+		opts.SetLimit(*effectiveLimit)
 	}
 	if op.Skip != nil {
 		opts.SetSkip(*op.Skip)

@@ -53,6 +53,25 @@ func main() {
 }
 ```
 
+## Execute Options
+
+The `Execute` method accepts optional configuration:
+
+### WithMaxRows
+
+Limit the maximum number of rows returned by `find()` and `countDocuments()` operations. This is useful to prevent excessive memory usage or network traffic from unbounded queries.
+
+```go
+// Cap results at 1000 rows
+result, err := gc.Execute(ctx, "mydb", `db.users.find()`, gomongo.WithMaxRows(1000))
+```
+
+**Behavior:**
+- If the query includes `.limit(N)`, the effective limit is `min(N, maxRows)`
+- Query limit 50 + MaxRows 1000 → returns up to 50 rows
+- Query limit 5000 + MaxRows 1000 → returns up to 1000 rows
+- `aggregate()` operations are not affected (use `$limit` stage instead)
+
 ## Output Format
 
 Results are returned in Extended JSON (Relaxed) format:

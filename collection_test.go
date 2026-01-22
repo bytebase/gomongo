@@ -2153,3 +2153,132 @@ func TestCursorMinMaxCombined(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, result.RowCount)
 }
+
+func TestWithMaxRowsCapsResults(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_maxrows_cap"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	ctx := context.Background()
+
+	// Insert 20 documents
+	collection := client.Database(dbName).Collection("items")
+	docs := make([]any, 20)
+	for i := 0; i < 20; i++ {
+		docs[i] = bson.M{"index": i}
+	}
+	_, err := collection.InsertMany(ctx, docs)
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Without MaxRows - returns all 20
+	result, err := gc.Execute(ctx, dbName, "db.items.find()")
+	require.NoError(t, err)
+	require.Equal(t, 20, result.RowCount)
+
+	// With MaxRows(10) - caps at 10
+	result, err = gc.Execute(ctx, dbName, "db.items.find()", gomongo.WithMaxRows(10))
+	require.NoError(t, err)
+	require.Equal(t, 10, result.RowCount)
+}
+
+func TestWithMaxRowsQueryLimitTakesPrecedence(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_maxrows_query_limit"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	ctx := context.Background()
+
+	// Insert 20 documents
+	collection := client.Database(dbName).Collection("items")
+	docs := make([]any, 20)
+	for i := 0; i < 20; i++ {
+		docs[i] = bson.M{"index": i}
+	}
+	_, err := collection.InsertMany(ctx, docs)
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Query limit(5) is smaller than MaxRows(100) - should return 5
+	result, err := gc.Execute(ctx, dbName, "db.items.find().limit(5)", gomongo.WithMaxRows(100))
+	require.NoError(t, err)
+	require.Equal(t, 5, result.RowCount)
+}
+
+func TestWithMaxRowsTakesPrecedenceOverLargerLimit(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_maxrows_precedence"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	ctx := context.Background()
+
+	// Insert 20 documents
+	collection := client.Database(dbName).Collection("items")
+	docs := make([]any, 20)
+	for i := 0; i < 20; i++ {
+		docs[i] = bson.M{"index": i}
+	}
+	_, err := collection.InsertMany(ctx, docs)
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Query limit(100) is larger than MaxRows(5) - should return 5
+	result, err := gc.Execute(ctx, dbName, "db.items.find().limit(100)", gomongo.WithMaxRows(5))
+	require.NoError(t, err)
+	require.Equal(t, 5, result.RowCount)
+}
+
+func TestExecuteBackwardCompatibility(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_backward_compat"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	ctx := context.Background()
+
+	collection := client.Database(dbName).Collection("items")
+	_, err := collection.InsertMany(ctx, []any{
+		bson.M{"name": "a"},
+		bson.M{"name": "b"},
+		bson.M{"name": "c"},
+	})
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Execute without options should work (backward compatible)
+	result, err := gc.Execute(ctx, dbName, "db.items.find()")
+	require.NoError(t, err)
+	require.Equal(t, 3, result.RowCount)
+}
+
+func TestCountDocumentsWithMaxRows(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_count_maxrows"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	ctx := context.Background()
+
+	// Insert 100 documents
+	collection := client.Database(dbName).Collection("items")
+	docs := make([]any, 100)
+	for i := 0; i < 100; i++ {
+		docs[i] = bson.M{"index": i}
+	}
+	_, err := collection.InsertMany(ctx, docs)
+	require.NoError(t, err)
+
+	gc := gomongo.NewClient(client)
+
+	// Without MaxRows - counts all 100
+	result, err := gc.Execute(ctx, dbName, "db.items.countDocuments()")
+	require.NoError(t, err)
+	require.Equal(t, "100", result.Rows[0])
+
+	// With MaxRows(50) - counts up to 50
+	result, err = gc.Execute(ctx, dbName, "db.items.countDocuments()", gomongo.WithMaxRows(50))
+	require.NoError(t, err)
+	require.Equal(t, "50", result.Rows[0])
+}
