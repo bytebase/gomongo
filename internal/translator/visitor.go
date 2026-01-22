@@ -178,27 +178,40 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	case mc.MinMethod() != nil:
 		v.extractMin(mc.MinMethod())
 
-	// Planned M2 write operations - return PlannedOperationError for fallback
+	// Supported M2 write operations
 	case mc.InsertOneMethod() != nil:
-		v.handleUnsupportedMethod("collection", "insertOne")
+		v.operation.OpType = OpInsertOne
+		v.extractInsertOneArgs(mc.InsertOneMethod())
+
 	case mc.InsertManyMethod() != nil:
-		v.handleUnsupportedMethod("collection", "insertMany")
+		v.operation.OpType = OpInsertMany
+		v.extractInsertManyArgs(mc.InsertManyMethod())
+
+	// Supported M2 write operations - updateOne
 	case mc.UpdateOneMethod() != nil:
-		v.handleUnsupportedMethod("collection", "updateOne")
+		v.operation.OpType = OpUpdateOne
+		v.extractUpdateOneArgs(mc.UpdateOneMethod())
 	case mc.UpdateManyMethod() != nil:
-		v.handleUnsupportedMethod("collection", "updateMany")
+		v.operation.OpType = OpUpdateMany
+		v.extractUpdateManyArgs(mc.UpdateManyMethod())
 	case mc.DeleteOneMethod() != nil:
-		v.handleUnsupportedMethod("collection", "deleteOne")
+		v.operation.OpType = OpDeleteOne
+		v.extractDeleteOneArgs(mc.DeleteOneMethod())
 	case mc.DeleteManyMethod() != nil:
-		v.handleUnsupportedMethod("collection", "deleteMany")
+		v.operation.OpType = OpDeleteMany
+		v.extractDeleteManyArgs(mc.DeleteManyMethod())
 	case mc.ReplaceOneMethod() != nil:
-		v.handleUnsupportedMethod("collection", "replaceOne")
+		v.operation.OpType = OpReplaceOne
+		v.extractReplaceOneArgs(mc.ReplaceOneMethod())
 	case mc.FindOneAndUpdateMethod() != nil:
-		v.handleUnsupportedMethod("collection", "findOneAndUpdate")
+		v.operation.OpType = OpFindOneAndUpdate
+		v.extractFindOneAndUpdateArgs(mc.FindOneAndUpdateMethod())
 	case mc.FindOneAndReplaceMethod() != nil:
-		v.handleUnsupportedMethod("collection", "findOneAndReplace")
+		v.operation.OpType = OpFindOneAndReplace
+		v.extractFindOneAndReplaceArgs(mc.FindOneAndReplaceMethod())
 	case mc.FindOneAndDeleteMethod() != nil:
-		v.handleUnsupportedMethod("collection", "findOneAndDelete")
+		v.operation.OpType = OpFindOneAndDelete
+		v.extractFindOneAndDeleteArgs(mc.FindOneAndDeleteMethod())
 
 	// Planned M3 index operations - return PlannedOperationError for fallback
 	case mc.CreateIndexMethod() != nil:

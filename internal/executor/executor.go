@@ -40,6 +40,26 @@ func Execute(ctx context.Context, client *mongo.Client, database string, op *tra
 		return executeEstimatedDocumentCount(ctx, client, database, op)
 	case translator.OpDistinct:
 		return executeDistinct(ctx, client, database, op)
+	case translator.OpInsertOne:
+		return executeInsertOne(ctx, client, database, op)
+	case translator.OpInsertMany:
+		return executeInsertMany(ctx, client, database, op)
+	case translator.OpUpdateOne:
+		return executeUpdateOne(ctx, client, database, op)
+	case translator.OpUpdateMany:
+		return executeUpdateMany(ctx, client, database, op)
+	case translator.OpReplaceOne:
+		return executeReplaceOne(ctx, client, database, op)
+	case translator.OpDeleteOne:
+		return executeDeleteOne(ctx, client, database, op)
+	case translator.OpDeleteMany:
+		return executeDeleteMany(ctx, client, database, op)
+	case translator.OpFindOneAndUpdate:
+		return executeFindOneAndUpdate(ctx, client, database, op)
+	case translator.OpFindOneAndReplace:
+		return executeFindOneAndReplace(ctx, client, database, op)
+	case translator.OpFindOneAndDelete:
+		return executeFindOneAndDelete(ctx, client, database, op)
 	default:
 		return nil, fmt.Errorf("unsupported operation: %s", statement)
 	}
