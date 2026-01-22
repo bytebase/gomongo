@@ -19,28 +19,6 @@ type methodInfo struct {
 // If a method IS in this registry, it's planned (fallback to mongosh).
 var methodRegistry = map[string]methodInfo{
 	// ============================================================
-	// MILESTONE 2: Write Operations (10 methods)
-	// ============================================================
-
-	// Insert Commands (2)
-	"collection:insertOne":  {status: statusPlanned},
-	"collection:insertMany": {status: statusPlanned},
-
-	// Update Commands (3)
-	"collection:updateOne":  {status: statusPlanned},
-	"collection:updateMany": {status: statusPlanned},
-	"collection:replaceOne": {status: statusPlanned},
-
-	// Delete Commands (2)
-	"collection:deleteOne":  {status: statusPlanned},
-	"collection:deleteMany": {status: statusPlanned},
-
-	// Atomic Find-and-Modify Commands (3)
-	"collection:findOneAndUpdate":  {status: statusPlanned},
-	"collection:findOneAndReplace": {status: statusPlanned},
-	"collection:findOneAndDelete":  {status: statusPlanned},
-
-	// ============================================================
 	// MILESTONE 3: Administrative Operations (22 methods)
 	// ============================================================
 

@@ -121,20 +121,56 @@ Results are returned in Extended JSON (Relaxed) format:
 | BinData() | `BinData(subtype, base64)` | |
 | RegExp() | `RegExp("pattern", "flags")`, `/pattern/flags` | |
 
-### Milestone 2: Write Operations (Planned)
+### Milestone 2: Write Operations (Current)
+
+#### Insert Commands
 
 | Command | Syntax | Status |
 |---------|--------|--------|
-| db.collection.insertOne() | `insertOne(document)` | Not yet supported |
-| db.collection.insertMany() | `insertMany(documents)` | Not yet supported |
-| db.collection.updateOne() | `updateOne(filter, update)` | Not yet supported |
-| db.collection.updateMany() | `updateMany(filter, update)` | Not yet supported |
-| db.collection.deleteOne() | `deleteOne(filter)` | Not yet supported |
-| db.collection.deleteMany() | `deleteMany(filter)` | Not yet supported |
-| db.collection.replaceOne() | `replaceOne(filter, replacement)` | Not yet supported |
-| db.collection.findOneAndUpdate() | `findOneAndUpdate(filter, update)` | Not yet supported |
-| db.collection.findOneAndReplace() | `findOneAndReplace(filter, replacement)` | Not yet supported |
-| db.collection.findOneAndDelete() | `findOneAndDelete(filter)` | Not yet supported |
+| db.collection.insertOne() | `insertOne(document, options)` | Supported |
+| db.collection.insertMany() | `insertMany(documents, options)` | Supported |
+
+#### Update Commands
+
+| Command | Syntax | Status |
+|---------|--------|--------|
+| db.collection.updateOne() | `updateOne(filter, update, options)` | Supported |
+| db.collection.updateMany() | `updateMany(filter, update, options)` | Supported |
+| db.collection.replaceOne() | `replaceOne(filter, replacement, options)` | Supported |
+
+#### Delete Commands
+
+| Command | Syntax | Status |
+|---------|--------|--------|
+| db.collection.deleteOne() | `deleteOne(filter, options)` | Supported |
+| db.collection.deleteMany() | `deleteMany(filter, options)` | Supported |
+
+#### Atomic Find-and-Modify Commands
+
+| Command | Syntax | Status |
+|---------|--------|--------|
+| db.collection.findOneAndUpdate() | `findOneAndUpdate(filter, update, options)` | Supported |
+| db.collection.findOneAndReplace() | `findOneAndReplace(filter, replacement, options)` | Supported |
+| db.collection.findOneAndDelete() | `findOneAndDelete(filter, options)` | Supported |
+
+#### Write Operation Options
+
+| Option | Applies To | Description |
+|--------|-----------|-------------|
+| `writeConcern` | All write ops | Write concern settings (`w`, `j`, `wtimeout`*) |
+| `bypassDocumentValidation` | Insert, Update, Replace, FindOneAndUpdate/Replace | Skip schema validation |
+| `comment` | All write ops | Comment for server logs |
+| `ordered` | insertMany | Execute inserts sequentially (default: true) |
+| `upsert` | Update, Replace, FindOneAndUpdate/Replace | Insert if no match found |
+| `hint` | Update, Replace, Delete, FindOneAnd* | Force index usage |
+| `collation` | Update, Replace, Delete, FindOneAnd* | String comparison rules |
+| `arrayFilters` | updateOne, updateMany, findOneAndUpdate | Array element filtering |
+| `let` | Update, Replace, Delete, FindOneAnd* | Variables for expressions |
+| `sort` | updateOne, replaceOne, FindOneAnd* | Document selection order |
+| `projection` | FindOneAnd* | Fields to return |
+| `returnDocument` | FindOneAndUpdate/Replace | Return "before" or "after" |
+
+*Note: `wtimeout` is parsed but ignored as it's not supported in MongoDB Go driver v2.
 
 ### Milestone 3: Administrative Operations (Planned)
 

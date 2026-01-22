@@ -840,3 +840,988 @@ func (v *visitor) extractArgumentsForDistinct(args mongodb.IArgumentsContext) {
 		return
 	}
 }
+
+// extractInsertOneArgs extracts arguments from InsertOneMethodContext.
+func (v *visitor) extractInsertOneArgs(ctx mongodb.IInsertOneMethodContext) {
+	method, ok := ctx.(*mongodb.InsertOneMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("insertOne() requires a document argument")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("insertOne() requires a document argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("insertOne() requires a document argument")
+		return
+	}
+
+	// First argument: document (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("insertOne() requires a document argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("insertOne() requires a document argument")
+		return
+	}
+
+	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("insertOne() document must be an object")
+		return
+	}
+
+	doc, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid document: %w", err)
+		return
+	}
+	v.operation.Document = doc
+
+	// Second argument: options (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("insertOne() options must be a document")
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "bypassDocumentValidation":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.BypassDocumentValidation = &val
+				} else {
+					v.err = fmt.Errorf("insertOne() bypassDocumentValidation must be a boolean")
+					return
+				}
+			case "comment":
+				v.operation.Comment = opt.Value
+			case "writeConcern":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.WriteConcern = doc
+				} else {
+					v.err = fmt.Errorf("insertOne() writeConcern must be a document")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "insertOne()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("insertOne() takes at most 2 arguments")
+		return
+	}
+}
+
+// extractUpdateOneArgs extracts arguments from UpdateOneMethodContext.
+func (v *visitor) extractUpdateOneArgs(ctx mongodb.IUpdateOneMethodContext) {
+	method, ok := ctx.(*mongodb.UpdateOneMethodContext)
+	if !ok {
+		return
+	}
+	v.extractUpdateArgs("updateOne", method.Arguments())
+}
+
+// extractUpdateManyArgs extracts arguments from UpdateManyMethodContext.
+func (v *visitor) extractUpdateManyArgs(ctx mongodb.IUpdateManyMethodContext) {
+	method, ok := ctx.(*mongodb.UpdateManyMethodContext)
+	if !ok {
+		return
+	}
+	v.extractUpdateArgs("updateMany", method.Arguments())
+}
+
+// extractUpdateArgs is shared between updateOne and updateMany.
+func (v *visitor) extractUpdateArgs(methodName string, args mongodb.IArgumentsContext) {
+	if args == nil {
+		v.err = fmt.Errorf("%s() requires filter and update arguments", methodName)
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() requires filter and update arguments", methodName)
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) < 2 {
+		v.err = fmt.Errorf("%s() requires filter and update arguments", methodName)
+		return
+	}
+
+	// First argument: filter (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() filter must be a document", methodName)
+		return
+	}
+
+	filterValueCtx := firstArg.Value()
+	if filterValueCtx == nil {
+		v.err = fmt.Errorf("%s() filter must be a document", methodName)
+		return
+	}
+
+	filterDocValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() filter must be a document", methodName)
+		return
+	}
+
+	filter, err := convertDocument(filterDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.Filter = filter
+
+	// Second argument: update (required) - can be document or pipeline
+	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() update must be a document or array", methodName)
+		return
+	}
+
+	updateValueCtx := secondArg.Value()
+	if updateValueCtx == nil {
+		v.err = fmt.Errorf("%s() update must be a document or array", methodName)
+		return
+	}
+
+	switch uv := updateValueCtx.(type) {
+	case *mongodb.DocumentValueContext:
+		update, err := convertDocument(uv.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid update: %w", err)
+			return
+		}
+		v.operation.Update = update
+	case *mongodb.ArrayValueContext:
+		// Aggregation pipeline update
+		pipeline, err := convertArray(uv.Array())
+		if err != nil {
+			v.err = fmt.Errorf("invalid update pipeline: %w", err)
+			return
+		}
+		v.operation.Update = pipeline
+	default:
+		v.err = fmt.Errorf("%s() update must be a document or array", methodName)
+		return
+	}
+
+	// Third argument: options (optional)
+	if len(allArgs) >= 3 {
+		thirdArg, ok := allArgs[2].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := thirdArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("%s() options must be a document", methodName)
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "upsert":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.Upsert = &val
+				} else {
+					v.err = fmt.Errorf("%s() upsert must be a boolean", methodName)
+					return
+				}
+			case "hint":
+				v.operation.Hint = opt.Value
+			case "collation":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Collation = doc
+				} else {
+					v.err = fmt.Errorf("%s() collation must be a document", methodName)
+					return
+				}
+			case "arrayFilters":
+				if arr, ok := opt.Value.(bson.A); ok {
+					v.operation.ArrayFilters = arr
+				} else {
+					v.err = fmt.Errorf("%s() arrayFilters must be an array", methodName)
+					return
+				}
+			case "let":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Let = doc
+				} else {
+					v.err = fmt.Errorf("%s() let must be a document", methodName)
+					return
+				}
+			case "bypassDocumentValidation":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.BypassDocumentValidation = &val
+				} else {
+					v.err = fmt.Errorf("%s() bypassDocumentValidation must be a boolean", methodName)
+					return
+				}
+			case "comment":
+				v.operation.Comment = opt.Value
+			case "sort":
+				// sort is only valid for updateOne (MongoDB 8.0+)
+				if methodName != "updateOne" {
+					v.err = &UnsupportedOptionError{
+						Method: methodName + "()",
+						Option: opt.Key,
+					}
+					return
+				}
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Sort = doc
+				} else {
+					v.err = fmt.Errorf("%s() sort must be a document", methodName)
+					return
+				}
+			case "writeConcern":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.WriteConcern = doc
+				} else {
+					v.err = fmt.Errorf("%s() writeConcern must be a document", methodName)
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: methodName + "()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 3 {
+		v.err = fmt.Errorf("%s() takes at most 3 arguments", methodName)
+		return
+	}
+}
+
+// extractInsertManyArgs extracts arguments from InsertManyMethodContext.
+func (v *visitor) extractInsertManyArgs(ctx mongodb.IInsertManyMethodContext) {
+	method, ok := ctx.(*mongodb.InsertManyMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("insertMany() requires an array argument")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("insertMany() requires an array argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("insertMany() requires an array argument")
+		return
+	}
+
+	// First argument: array of documents (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("insertMany() requires an array argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("insertMany() requires an array argument")
+		return
+	}
+
+	arrayValue, ok := valueCtx.(*mongodb.ArrayValueContext)
+	if !ok {
+		v.err = fmt.Errorf("insertMany() requires an array argument")
+		return
+	}
+
+	arr, err := convertArray(arrayValue.Array())
+	if err != nil {
+		v.err = fmt.Errorf("invalid documents array: %w", err)
+		return
+	}
+
+	// Convert array elements to bson.D
+	var docs []bson.D
+	for i, elem := range arr {
+		doc, ok := elem.(bson.D)
+		if !ok {
+			v.err = fmt.Errorf("insertMany() element %d must be a document", i)
+			return
+		}
+		docs = append(docs, doc)
+	}
+	v.operation.Documents = docs
+
+	// Second argument: options (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("insertMany() options must be a document")
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "ordered":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.Ordered = &val
+				} else {
+					v.err = fmt.Errorf("insertMany() ordered must be a boolean")
+					return
+				}
+			case "bypassDocumentValidation":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.BypassDocumentValidation = &val
+				} else {
+					v.err = fmt.Errorf("insertMany() bypassDocumentValidation must be a boolean")
+					return
+				}
+			case "comment":
+				v.operation.Comment = opt.Value
+			case "writeConcern":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.WriteConcern = doc
+				} else {
+					v.err = fmt.Errorf("insertMany() writeConcern must be a document")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "insertMany()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("insertMany() takes at most 2 arguments")
+		return
+	}
+}
+
+// extractReplaceOneArgs extracts arguments from ReplaceOneMethodContext.
+func (v *visitor) extractReplaceOneArgs(ctx mongodb.IReplaceOneMethodContext) {
+	method, ok := ctx.(*mongodb.ReplaceOneMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("replaceOne() requires filter and replacement arguments")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("replaceOne() requires filter and replacement arguments")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) < 2 {
+		v.err = fmt.Errorf("replaceOne() requires filter and replacement arguments")
+		return
+	}
+
+	// First argument: filter
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	filterValueCtx := firstArg.Value()
+	if filterValueCtx == nil {
+		return
+	}
+
+	filterDocValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("replaceOne() filter must be a document")
+		return
+	}
+
+	filter, err := convertDocument(filterDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.Filter = filter
+
+	// Second argument: replacement document
+	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	replacementValueCtx := secondArg.Value()
+	if replacementValueCtx == nil {
+		return
+	}
+
+	replacementDocValue, ok := replacementValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("replaceOne() replacement must be a document")
+		return
+	}
+
+	replacement, err := convertDocument(replacementDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid replacement: %w", err)
+		return
+	}
+	v.operation.Replacement = replacement
+
+	// Third argument: options (optional)
+	if len(allArgs) >= 3 {
+		thirdArg, ok := allArgs[2].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := thirdArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("replaceOne() options must be a document")
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "upsert":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.Upsert = &val
+				} else {
+					v.err = fmt.Errorf("replaceOne() upsert must be a boolean")
+					return
+				}
+			case "hint":
+				v.operation.Hint = opt.Value
+			case "collation":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Collation = doc
+				} else {
+					v.err = fmt.Errorf("replaceOne() collation must be a document")
+					return
+				}
+			case "let":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Let = doc
+				} else {
+					v.err = fmt.Errorf("replaceOne() let must be a document")
+					return
+				}
+			case "bypassDocumentValidation":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.BypassDocumentValidation = &val
+				} else {
+					v.err = fmt.Errorf("replaceOne() bypassDocumentValidation must be a boolean")
+					return
+				}
+			case "comment":
+				v.operation.Comment = opt.Value
+			case "sort":
+				// sort is supported for replaceOne (MongoDB 8.0+)
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Sort = doc
+				} else {
+					v.err = fmt.Errorf("replaceOne() sort must be a document")
+					return
+				}
+			case "writeConcern":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.WriteConcern = doc
+				} else {
+					v.err = fmt.Errorf("replaceOne() writeConcern must be a document")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "replaceOne()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 3 {
+		v.err = fmt.Errorf("replaceOne() takes at most 3 arguments")
+		return
+	}
+}
+
+// extractDeleteOneArgs extracts arguments from DeleteOneMethodContext.
+func (v *visitor) extractDeleteOneArgs(ctx mongodb.IDeleteOneMethodContext) {
+	method, ok := ctx.(*mongodb.DeleteOneMethodContext)
+	if !ok {
+		return
+	}
+	v.extractDeleteArgs("deleteOne", method.Arguments())
+}
+
+// extractDeleteManyArgs extracts arguments from DeleteManyMethodContext.
+func (v *visitor) extractDeleteManyArgs(ctx mongodb.IDeleteManyMethodContext) {
+	method, ok := ctx.(*mongodb.DeleteManyMethodContext)
+	if !ok {
+		return
+	}
+	v.extractDeleteArgs("deleteMany", method.Arguments())
+}
+
+// extractDeleteArgs is shared between deleteOne and deleteMany.
+func (v *visitor) extractDeleteArgs(methodName string, args mongodb.IArgumentsContext) {
+	if args == nil {
+		v.err = fmt.Errorf("%s() requires a filter argument", methodName)
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() requires a filter argument", methodName)
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("%s() requires a filter argument", methodName)
+		return
+	}
+
+	// First argument: filter (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	filterValueCtx := firstArg.Value()
+	if filterValueCtx == nil {
+		return
+	}
+
+	filterDocValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() filter must be a document", methodName)
+		return
+	}
+
+	filter, err := convertDocument(filterDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.Filter = filter
+
+	// Second argument: options (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("%s() options must be a document", methodName)
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "hint":
+				v.operation.Hint = opt.Value
+			case "collation":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Collation = doc
+				} else {
+					v.err = fmt.Errorf("%s() collation must be a document", methodName)
+					return
+				}
+			case "let":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Let = doc
+				} else {
+					v.err = fmt.Errorf("%s() let must be a document", methodName)
+					return
+				}
+			case "comment":
+				v.operation.Comment = opt.Value
+			case "writeConcern":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.WriteConcern = doc
+				} else {
+					v.err = fmt.Errorf("%s() writeConcern must be a document", methodName)
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: methodName + "()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("%s() takes at most 2 arguments", methodName)
+		return
+	}
+}
+
+// extractFindOneAndUpdateArgs extracts arguments from FindOneAndUpdateMethodContext.
+func (v *visitor) extractFindOneAndUpdateArgs(ctx mongodb.IFindOneAndUpdateMethodContext) {
+	method, ok := ctx.(*mongodb.FindOneAndUpdateMethodContext)
+	if !ok {
+		return
+	}
+	v.extractFindOneAndModifyArgs("findOneAndUpdate", method.Arguments(), true)
+}
+
+// extractFindOneAndReplaceArgs extracts arguments from FindOneAndReplaceMethodContext.
+func (v *visitor) extractFindOneAndReplaceArgs(ctx mongodb.IFindOneAndReplaceMethodContext) {
+	method, ok := ctx.(*mongodb.FindOneAndReplaceMethodContext)
+	if !ok {
+		return
+	}
+	v.extractFindOneAndModifyArgs("findOneAndReplace", method.Arguments(), true)
+}
+
+// extractFindOneAndDeleteArgs extracts arguments from FindOneAndDeleteMethodContext.
+func (v *visitor) extractFindOneAndDeleteArgs(ctx mongodb.IFindOneAndDeleteMethodContext) {
+	method, ok := ctx.(*mongodb.FindOneAndDeleteMethodContext)
+	if !ok {
+		return
+	}
+	v.extractFindOneAndModifyArgs("findOneAndDelete", method.Arguments(), false)
+}
+
+// extractFindOneAndModifyArgs handles arguments for findOneAndUpdate/Replace/Delete.
+// hasUpdate indicates whether the second arg is update/replacement (true) or not (false for delete).
+func (v *visitor) extractFindOneAndModifyArgs(methodName string, args mongodb.IArgumentsContext, hasUpdate bool) {
+	if args == nil {
+		if hasUpdate {
+			v.err = fmt.Errorf("%s() requires filter and update arguments", methodName)
+		} else {
+			v.err = fmt.Errorf("%s() requires a filter argument", methodName)
+		}
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	minArgs := 1
+	if hasUpdate {
+		minArgs = 2
+	}
+	if len(allArgs) < minArgs {
+		if hasUpdate {
+			v.err = fmt.Errorf("%s() requires filter and update arguments", methodName)
+		} else {
+			v.err = fmt.Errorf("%s() requires a filter argument", methodName)
+		}
+		return
+	}
+
+	// First argument: filter
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	filterValueCtx := firstArg.Value()
+	if filterValueCtx == nil {
+		return
+	}
+
+	filterDocValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("%s() filter must be a document", methodName)
+		return
+	}
+
+	filter, err := convertDocument(filterDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.Filter = filter
+
+	optionsArgIdx := 1
+	if hasUpdate {
+		// Second argument: update/replacement
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		updateValueCtx := secondArg.Value()
+		if updateValueCtx == nil {
+			return
+		}
+
+		if methodName == "findOneAndReplace" {
+			// Replacement must be a document
+			docValue, ok := updateValueCtx.(*mongodb.DocumentValueContext)
+			if !ok {
+				v.err = fmt.Errorf("%s() replacement must be a document", methodName)
+				return
+			}
+			replacement, err := convertDocument(docValue.Document())
+			if err != nil {
+				v.err = fmt.Errorf("invalid replacement: %w", err)
+				return
+			}
+			v.operation.Replacement = replacement
+		} else {
+			// Update can be document or pipeline
+			switch uv := updateValueCtx.(type) {
+			case *mongodb.DocumentValueContext:
+				update, err := convertDocument(uv.Document())
+				if err != nil {
+					v.err = fmt.Errorf("invalid update: %w", err)
+					return
+				}
+				v.operation.Update = update
+			case *mongodb.ArrayValueContext:
+				pipeline, err := convertArray(uv.Array())
+				if err != nil {
+					v.err = fmt.Errorf("invalid update pipeline: %w", err)
+					return
+				}
+				v.operation.Update = pipeline
+			default:
+				v.err = fmt.Errorf("%s() update must be a document or array", methodName)
+				return
+			}
+		}
+		optionsArgIdx = 2
+	}
+
+	// Options argument
+	if len(allArgs) > optionsArgIdx {
+		optArg, ok := allArgs[optionsArgIdx].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := optArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("%s() options must be a document", methodName)
+			return
+		}
+
+		opts, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range opts {
+			switch opt.Key {
+			case "upsert":
+				if methodName == "findOneAndDelete" {
+					v.err = &UnsupportedOptionError{Method: methodName + "()", Option: opt.Key}
+					return
+				}
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.Upsert = &val
+				} else {
+					v.err = fmt.Errorf("%s() upsert must be a boolean", methodName)
+					return
+				}
+			case "returnDocument":
+				if val, ok := opt.Value.(string); ok {
+					if val != "before" && val != "after" {
+						v.err = fmt.Errorf("%s() returnDocument must be 'before' or 'after'", methodName)
+						return
+					}
+					v.operation.ReturnDocument = &val
+				} else {
+					v.err = fmt.Errorf("%s() returnDocument must be a string", methodName)
+					return
+				}
+			case "projection":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Projection = doc
+				} else {
+					v.err = fmt.Errorf("%s() projection must be a document", methodName)
+					return
+				}
+			case "sort":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Sort = doc
+				} else {
+					v.err = fmt.Errorf("%s() sort must be a document", methodName)
+					return
+				}
+			case "hint":
+				v.operation.Hint = opt.Value
+			case "collation":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Collation = doc
+				} else {
+					v.err = fmt.Errorf("%s() collation must be a document", methodName)
+					return
+				}
+			case "arrayFilters":
+				if methodName == "findOneAndDelete" || methodName == "findOneAndReplace" {
+					v.err = &UnsupportedOptionError{Method: methodName + "()", Option: opt.Key}
+					return
+				}
+				if arr, ok := opt.Value.(bson.A); ok {
+					v.operation.ArrayFilters = arr
+				} else {
+					v.err = fmt.Errorf("%s() arrayFilters must be an array", methodName)
+					return
+				}
+			case "let":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Let = doc
+				} else {
+					v.err = fmt.Errorf("%s() let must be a document", methodName)
+					return
+				}
+			case "bypassDocumentValidation":
+				if methodName == "findOneAndDelete" {
+					v.err = &UnsupportedOptionError{Method: methodName + "()", Option: opt.Key}
+					return
+				}
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.BypassDocumentValidation = &val
+				} else {
+					v.err = fmt.Errorf("%s() bypassDocumentValidation must be a boolean", methodName)
+					return
+				}
+			case "comment":
+				v.operation.Comment = opt.Value
+			case "writeConcern":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.WriteConcern = doc
+				} else {
+					v.err = fmt.Errorf("%s() writeConcern must be a document", methodName)
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: methodName + "()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	maxArgs := optionsArgIdx + 1
+	if len(allArgs) > maxArgs {
+		v.err = fmt.Errorf("%s() takes at most %d arguments", methodName, maxArgs)
+		return
+	}
+}

@@ -18,6 +18,17 @@ const (
 	OpCountDocuments
 	OpEstimatedDocumentCount
 	OpDistinct
+	// M2: Write Operations
+	OpInsertOne
+	OpInsertMany
+	OpUpdateOne
+	OpUpdateMany
+	OpReplaceOne
+	OpDeleteOne
+	OpDeleteMany
+	OpFindOneAndUpdate
+	OpFindOneAndReplace
+	OpFindOneAndDelete
 )
 
 // Operation represents a parsed MongoDB operation.
@@ -42,4 +53,21 @@ type Operation struct {
 	// getCollectionInfos options
 	NameOnly              *bool
 	AuthorizedCollections *bool
+
+	// M2: Write operation fields
+	Document       bson.D   // insertOne document
+	Documents      []bson.D // insertMany documents
+	Update         any      // update document or pipeline (bson.D or bson.A)
+	Replacement    bson.D   // replaceOne replacement document
+	Upsert         *bool    // upsert option for update/replace operations
+	ReturnDocument *string  // "before" or "after" for findOneAnd* operations
+
+	// M2: Additional write operation options
+	Ordered                  *bool   // insertMany ordered option
+	Collation                bson.D  // collation settings for string comparison
+	ArrayFilters             bson.A  // array element filters for update operations
+	Let                      bson.D  // variables for aggregation expressions
+	BypassDocumentValidation *bool   // bypass schema validation
+	Comment                  any     // comment for server logs/profiling
+	WriteConcern             bson.D  // write concern settings (w, j, wtimeout)
 }
