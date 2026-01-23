@@ -2282,3 +2282,525 @@ func TestCountDocumentsWithMaxRows(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "50", result.Rows[0])
 }
+
+func TestUnicodeSupport(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_unicode"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	t.Run("unicode in field values", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			statement string
+			checkKey  string
+			checkVal  string
+		}{
+			{
+				name:      "emoji values",
+				statement: `db.unicode.insertOne({status: "🔥 hot", message: "Hello 👋 World 🌍"})`,
+				checkKey:  "status",
+				checkVal:  "🔥 hot",
+			},
+			{
+				name:      "hindi values",
+				statement: `db.unicode.insertOne({name: "राहुल", city: "दिल्ली"})`,
+				checkKey:  "city",
+				checkVal:  "दिल्ली",
+			},
+			{
+				name:      "chinese values",
+				statement: `db.unicode.insertOne({name: "太郎", city: "东京"})`,
+				checkKey:  "city",
+				checkVal:  "东京",
+			},
+			{
+				name:      "mixed european",
+				statement: `db.unicode.insertOne({user: "Müller", city: "Zürich"})`,
+				checkKey:  "user",
+				checkVal:  "Müller",
+			},
+			{
+				name:      "arabic rtl",
+				statement: `db.unicode.insertOne({greeting: "مرحبا", name: "أحمد"})`,
+				checkKey:  "greeting",
+				checkVal:  "مرحبا",
+			},
+			{
+				name:      "korean",
+				statement: `db.unicode.insertOne({greeting: "안녕하세요", name: "김철수"})`,
+				checkKey:  "name",
+				checkVal:  "김철수",
+			},
+			{
+				name:      "japanese mixed",
+				statement: `db.unicode.insertOne({hiragana: "こんにちは", katakana: "コンニチハ", kanji: "今日は"})`,
+				checkKey:  "hiragana",
+				checkVal:  "こんにちは",
+			},
+			{
+				name:      "special symbols",
+				statement: `db.unicode.insertOne({math: "∑∏∫∂", currency: "€£¥₹"})`,
+				checkKey:  "currency",
+				checkVal:  "€£¥₹",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tt.statement)
+				require.NoError(t, err)
+				require.Equal(t, 1, result.RowCount)
+				require.Contains(t, result.Rows[0], `"acknowledged": true`)
+
+				// Verify the data was stored correctly by querying it back
+				findStmt := `db.unicode.findOne({` + tt.checkKey + `: "` + tt.checkVal + `"})`
+				findResult, err := gc.Execute(ctx, dbName, findStmt)
+				require.NoError(t, err)
+				require.Equal(t, 1, findResult.RowCount)
+				require.Contains(t, findResult.Rows[0], tt.checkVal)
+			})
+		}
+	})
+
+	t.Run("unicode in field names", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			statement string
+			fieldName string
+			fieldVal  string
+		}{
+			{
+				name:      "emoji field names",
+				statement: `db.unicode_fields.insertOne({"🔥status": "hot", "📧email": "test@example.com"})`,
+				fieldName: "🔥status",
+				fieldVal:  "hot",
+			},
+			{
+				name:      "hindi field names",
+				statement: `db.unicode_fields.insertOne({"नाम": "rahul", "शहर": "delhi"})`,
+				fieldName: "नाम",
+				fieldVal:  "rahul",
+			},
+			{
+				name:      "chinese field names",
+				statement: `db.unicode_fields.insertOne({"名前": "taro", "都市": "tokyo"})`,
+				fieldName: "名前",
+				fieldVal:  "taro",
+			},
+			{
+				name:      "korean field names",
+				statement: `db.unicode_fields.insertOne({"이름": "kim", "도시": "seoul"})`,
+				fieldName: "이름",
+				fieldVal:  "kim",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tt.statement)
+				require.NoError(t, err)
+				require.Equal(t, 1, result.RowCount)
+				require.Contains(t, result.Rows[0], `"acknowledged": true`)
+
+				// Query using unicode field name
+				findStmt := `db.unicode_fields.findOne({"` + tt.fieldName + `": "` + tt.fieldVal + `"})`
+				findResult, err := gc.Execute(ctx, dbName, findStmt)
+				require.NoError(t, err)
+				require.Equal(t, 1, findResult.RowCount)
+				require.Contains(t, findResult.Rows[0], tt.fieldName)
+			})
+		}
+	})
+
+	t.Run("unicode in queries", func(t *testing.T) {
+		// Setup: insert documents with unicode data
+		setupStatements := []string{
+			`db.unicode_query.insertOne({city: "दिल्ली", country: "भारत", population: 20000000})`,
+			`db.unicode_query.insertOne({city: "东京", country: "日本", population: 14000000})`,
+			`db.unicode_query.insertOne({city: "서울", country: "한국", population: 10000000})`,
+		}
+		for _, stmt := range setupStatements {
+			_, err := gc.Execute(ctx, dbName, stmt)
+			require.NoError(t, err)
+		}
+
+		tests := []struct {
+			name          string
+			statement     string
+			expectedCount int
+		}{
+			{
+				name:          "filter by hindi value",
+				statement:     `db.unicode_query.find({city: "दिल्ली"})`,
+				expectedCount: 1,
+			},
+			{
+				name:          "filter by chinese value",
+				statement:     `db.unicode_query.find({country: "日本"})`,
+				expectedCount: 1,
+			},
+			{
+				name:          "filter by korean value",
+				statement:     `db.unicode_query.find({city: "서울"})`,
+				expectedCount: 1,
+			},
+			{
+				name:          "regex with unicode",
+				statement:     `db.unicode_query.find({city: {$regex: "^दि"}})`,
+				expectedCount: 1,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tt.statement)
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedCount, result.RowCount)
+			})
+		}
+	})
+
+	t.Run("unicode in aggregation", func(t *testing.T) {
+		// Setup: insert documents
+		setupStatements := []string{
+			`db.unicode_agg.insertOne({category: "फल", name: "सेब", price: 100})`,
+			`db.unicode_agg.insertOne({category: "फल", name: "केला", price: 50})`,
+			`db.unicode_agg.insertOne({category: "सब्जी", name: "आलू", price: 30})`,
+		}
+		for _, stmt := range setupStatements {
+			_, err := gc.Execute(ctx, dbName, stmt)
+			require.NoError(t, err)
+		}
+
+		tests := []struct {
+			name          string
+			statement     string
+			expectedCount int
+			checkContains string
+		}{
+			{
+				name:          "match unicode value",
+				statement:     `db.unicode_agg.aggregate([{$match: {category: "फल"}}])`,
+				expectedCount: 2,
+				checkContains: "फल",
+			},
+			{
+				name:          "group by unicode field value",
+				statement:     `db.unicode_agg.aggregate([{$group: {_id: "$category", total: {$sum: "$price"}}}])`,
+				expectedCount: 2,
+				checkContains: "फल",
+			},
+			{
+				name:          "project unicode fields",
+				statement:     `db.unicode_agg.aggregate([{$project: {name: 1, category: 1, _id: 0}}])`,
+				expectedCount: 3,
+				checkContains: "सेब",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tt.statement)
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedCount, result.RowCount)
+				// Check that at least one row contains the expected unicode string
+				found := false
+				for _, row := range result.Rows {
+					if strings.Contains(row, tt.checkContains) {
+						found = true
+						break
+					}
+				}
+				require.True(t, found, "expected to find %q in results", tt.checkContains)
+			})
+		}
+	})
+}
+
+// TestAggregateJavaScriptFunctionParsing tests that the parser correctly handles
+// $function and $accumulator operators with JavaScript code.
+// Note: These tests only verify parsing. Actual execution requires MongoDB
+// server-side JavaScript to be enabled (security.javascriptEnabled: true).
+func TestAggregateJavaScriptFunctionParsing(t *testing.T) {
+	client := testutil.GetClient(t)
+	dbName := "testdb_js_parsing"
+	defer testutil.CleanupDatabase(t, client, dbName)
+
+	gc := gomongo.NewClient(client)
+	ctx := context.Background()
+
+	// Setup: insert test documents
+	setupStatements := []string{
+		`db.items.insertOne({name: "apple", price: 100, quantity: 5})`,
+		`db.items.insertOne({name: "banana", price: 50, quantity: 10})`,
+		`db.items.insertOne({name: "cherry", price: 200, quantity: 3})`,
+	}
+	for _, stmt := range setupStatements {
+		_, err := gc.Execute(ctx, dbName, stmt)
+		require.NoError(t, err)
+	}
+
+	t.Run("$function operator parsing", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			statement string
+		}{
+			{
+				name: "simple function with string body",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						isExpensive: {
+							$function: {
+								body: "function(price) { return price > 100; }",
+								args: ["$price"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function with multiple arguments",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						totalValue: {
+							$function: {
+								body: "function(price, qty) { return price * qty; }",
+								args: ["$price", "$quantity"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function with conditional logic",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						priceCategory: {
+							$function: {
+								body: "function(p) { if (p > 150) return 'expensive'; else if (p > 75) return 'medium'; else return 'cheap'; }",
+								args: ["$price"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function with array operations",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						nameUpper: {
+							$function: {
+								body: "function(name) { return name.toUpperCase(); }",
+								args: ["$name"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function in $match stage via $expr",
+				statement: `db.items.aggregate([
+					{ $match: {
+						$expr: {
+							$function: {
+								body: "function(price) { return price % 50 === 0; }",
+								args: ["$price"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// The goal is to verify the statement parses correctly.
+				// Execution may fail if JS is disabled on the server,
+				// but parse errors would be different from execution errors.
+				_, err := gc.Execute(ctx, dbName, tt.statement)
+				// We check that it's either successful or a MongoDB execution error,
+				// not a parse error. Parse errors would mention "parse" or syntax issues.
+				if err != nil {
+					// MongoDB returns "JavaScript execution is disabled" or similar
+					// when JS is disabled, which is fine - it means parsing succeeded.
+					errStr := err.Error()
+					require.NotContains(t, errStr, "parse", "statement should parse without errors")
+					require.NotContains(t, errStr, "syntax", "statement should have valid syntax")
+				}
+			})
+		}
+	})
+
+	t.Run("$accumulator operator parsing", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			statement string
+		}{
+			{
+				name: "basic accumulator",
+				statement: `db.items.aggregate([
+					{ $group: {
+						_id: null,
+						customSum: {
+							$accumulator: {
+								init: "function() { return 0; }",
+								accumulate: "function(state, price) { return state + price; }",
+								accumulateArgs: ["$price"],
+								merge: "function(state1, state2) { return state1 + state2; }",
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "accumulator with finalize",
+				statement: `db.items.aggregate([
+					{ $group: {
+						_id: null,
+						avgPrice: {
+							$accumulator: {
+								init: "function() { return { sum: 0, count: 0 }; }",
+								accumulate: "function(state, price) { state.sum += price; state.count++; return state; }",
+								accumulateArgs: ["$price"],
+								merge: "function(s1, s2) { return { sum: s1.sum + s2.sum, count: s1.count + s2.count }; }",
+								finalize: "function(state) { return state.sum / state.count; }",
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "accumulator with initArgs",
+				statement: `db.items.aggregate([
+					{ $group: {
+						_id: null,
+						weightedSum: {
+							$accumulator: {
+								init: "function(multiplier) { return { total: 0, mult: multiplier }; }",
+								initArgs: [2],
+								accumulate: "function(state, price) { state.total += price * state.mult; return state; }",
+								accumulateArgs: ["$price"],
+								merge: "function(s1, s2) { return { total: s1.total + s2.total, mult: s1.mult }; }",
+								finalize: "function(state) { return state.total; }",
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "accumulator with multiple accumulateArgs",
+				statement: `db.items.aggregate([
+					{ $group: {
+						_id: null,
+						totalValue: {
+							$accumulator: {
+								init: "function() { return 0; }",
+								accumulate: "function(state, price, qty) { return state + (price * qty); }",
+								accumulateArgs: ["$price", "$quantity"],
+								merge: "function(s1, s2) { return s1 + s2; }",
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := gc.Execute(ctx, dbName, tt.statement)
+				if err != nil {
+					errStr := err.Error()
+					require.NotContains(t, errStr, "parse", "statement should parse without errors")
+					require.NotContains(t, errStr, "syntax", "statement should have valid syntax")
+				}
+			})
+		}
+	})
+
+	t.Run("$function with special characters in JS body", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			statement string
+		}{
+			{
+				name: "function with escaped quotes",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						greeting: {
+							$function: {
+								body: "function(name) { return \"Hello, \" + name + \"!\"; }",
+								args: ["$name"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function with single quotes",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						greeting: {
+							$function: {
+								body: "function(name) { return 'Hello, ' + name; }",
+								args: ["$name"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function with newline in logic",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						category: {
+							$function: {
+								body: "function(p) { var result; if (p > 100) { result = 'high'; } else { result = 'low'; } return result; }",
+								args: ["$price"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+			{
+				name: "function with regex",
+				statement: `db.items.aggregate([
+					{ $addFields: {
+						hasVowelStart: {
+							$function: {
+								body: "function(name) { return /^[aeiou]/i.test(name); }",
+								args: ["$name"],
+								lang: "js"
+							}
+						}
+					}}
+				])`,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				_, err := gc.Execute(ctx, dbName, tt.statement)
+				if err != nil {
+					errStr := err.Error()
+					require.NotContains(t, errStr, "parse", "statement should parse without errors")
+					require.NotContains(t, errStr, "syntax", "statement should have valid syntax")
+				}
+			})
+		}
+	})
+}
