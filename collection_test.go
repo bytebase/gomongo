@@ -1913,7 +1913,8 @@ func TestDistinct(t *testing.T) {
 		for _, row := range result.Rows {
 			values[row] = true
 		}
-		require.True(t, values[`"active"`] || values[`"inactive"`])
+		require.True(t, values[`"active"`])
+		require.True(t, values[`"inactive"`])
 	})
 }
 

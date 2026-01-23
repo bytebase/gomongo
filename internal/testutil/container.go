@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -115,6 +116,17 @@ func setupContainers(ctx context.Context) ([]TestDB, error) {
 		return nil, fmt.Errorf("container setup failed: %v", errs)
 	}
 
+	// Sort by name for stable ordering
+	slices.SortFunc(dbs, func(a, b TestDB) int {
+		if a.Name < b.Name {
+			return -1
+		}
+		if a.Name > b.Name {
+			return 1
+		}
+		return 0
+	})
+
 	return dbs, nil
 }
 
@@ -132,6 +144,13 @@ func setupMongoDB(ctx context.Context, name, image string) (TestDB, error) {
 	client, err := mongo.Connect(options.Client().ApplyURI(connStr))
 	if err != nil {
 		return TestDB{}, err
+	}
+
+	// Verify connection
+	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := client.Ping(pingCtx, nil); err != nil {
+		return TestDB{}, fmt.Errorf("ping failed: %w", err)
 	}
 
 	return TestDB{Name: name, Client: client}, nil
@@ -158,7 +177,7 @@ func setupDocumentDB(ctx context.Context) (TestDB, error) {
 		return TestDB{}, err
 	}
 
-	port, err := container.MappedPort(ctx, "10260")
+	port, err := container.MappedPort(ctx, "10260/tcp")
 	if err != nil {
 		return TestDB{}, err
 	}

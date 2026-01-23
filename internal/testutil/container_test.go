@@ -11,7 +11,7 @@ import (
 
 func TestMultiContainer(t *testing.T) {
 	dbs := GetAllClients(t)
-	require.GreaterOrEqual(t, len(dbs), 2) // At least mongo4 and mongo8
+	require.Equal(t, 3, len(dbs)) // All three databases must be available: documentdb, mongo4, mongo8
 	for _, db := range dbs {
 		require.NotEmpty(t, db.Name)
 		require.NotNil(t, db.Client)
