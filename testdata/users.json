@@ -1,0 +1,7 @@
+[
+  {"_id": "user1", "name": "Alice", "age": 30, "city": "Tokyo", "active": true, "score": 95.5, "tags": ["admin", "vip"]},
+  {"_id": "user2", "name": "Bob", "age": 25, "city": "Paris", "active": false, "score": 88.0, "tags": ["user"]},
+  {"_id": "user3", "name": "Charlie", "age": 35, "city": "Tokyo", "active": true, "score": 72.3, "tags": []},
+  {"_id": "user4", "name": "Diana", "age": 28, "city": "London", "active": true, "score": null, "tags": ["user", "beta"]},
+  {"_id": "user5", "name": "Eve", "age": 45, "city": "Berlin", "active": false, "score": 100.0, "tags": ["admin"]}
+]

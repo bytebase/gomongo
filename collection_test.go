@@ -2,6 +2,7 @@ package gomongo_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,818 +15,840 @@ import (
 )
 
 func TestFindEmptyCollection(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_empty"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_empty_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	gc := gomongo.NewClient(client)
-	ctx := context.Background()
+		gc := gomongo.NewClient(db.Client)
+		ctx := context.Background()
 
-	result, err := gc.Execute(ctx, dbName, "db.users.find()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 0, result.RowCount)
-	require.Empty(t, result.Rows)
+		result, err := gc.Execute(ctx, dbName, "db.users.find()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 0, result.RowCount)
+		require.Empty(t, result.Rows)
+	})
 }
 
 func TestFindWithDocuments(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_docs"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_docs_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Insert test documents
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30},
-		bson.M{"name": "bob", "age": 25},
+		// Insert test documents
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30},
+			bson.M{"name": "bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		result, err := gc.Execute(ctx, dbName, "db.users.find()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 2, result.RowCount)
+		require.Len(t, result.Rows, 2)
+
+		// Verify JSON format
+		for _, row := range result.Rows {
+			require.Contains(t, row, "name")
+			require.Contains(t, row, "age")
+			require.Contains(t, row, "_id")
+		}
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-	result, err := gc.Execute(ctx, dbName, "db.users.find()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 2, result.RowCount)
-	require.Len(t, result.Rows, 2)
-
-	// Verify JSON format
-	for _, row := range result.Rows {
-		require.Contains(t, row, "name")
-		require.Contains(t, row, "age")
-		require.Contains(t, row, "_id")
-	}
 }
 
 func TestFindWithEmptyFilter(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_empty_filter"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_empty_filter_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertOne(ctx, bson.M{"item": "test"})
-	require.NoError(t, err)
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertOne(ctx, bson.M{"item": "test"})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
-	result, err := gc.Execute(ctx, dbName, "db.items.find({})")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
+		gc := gomongo.NewClient(db.Client)
+		result, err := gc.Execute(ctx, dbName, "db.items.find({})")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+	})
 }
 
 func TestFindOneEmptyCollection(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_empty"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_empty_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	gc := gomongo.NewClient(client)
-	ctx := context.Background()
+		gc := gomongo.NewClient(db.Client)
+		ctx := context.Background()
 
-	result, err := gc.Execute(ctx, dbName, "db.users.findOne()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 0, result.RowCount)
-	require.Empty(t, result.Rows)
+		result, err := gc.Execute(ctx, dbName, "db.users.findOne()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 0, result.RowCount)
+		require.Empty(t, result.Rows)
+	})
 }
 
 func TestFindOneWithDocuments(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_docs"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_docs_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30},
-		bson.M{"name": "bob", "age": 25},
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30},
+			bson.M{"name": "bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		result, err := gc.Execute(ctx, dbName, "db.users.findOne()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+		require.Len(t, result.Rows, 1)
+		require.Contains(t, result.Rows[0], "name")
+		require.Contains(t, result.Rows[0], "age")
+		require.Contains(t, result.Rows[0], "_id")
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-	result, err := gc.Execute(ctx, dbName, "db.users.findOne()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
-	require.Len(t, result.Rows, 1)
-	require.Contains(t, result.Rows[0], "name")
-	require.Contains(t, result.Rows[0], "age")
-	require.Contains(t, result.Rows[0], "_id")
 }
 
 func TestFindOneWithFilter(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_filter"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_filter_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30},
-		bson.M{"name": "bob", "age": 25},
-		bson.M{"name": "carol", "age": 35},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	tests := []struct {
-		name        string
-		statement   string
-		expectMatch bool
-		checkResult func(t *testing.T, row string)
-	}{
-		{
-			name:        "filter by string",
-			statement:   `db.users.findOne({ name: "bob" })`,
-			expectMatch: true,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"bob"`)
-				require.Contains(t, row, `"age": 25`)
-			},
-		},
-		{
-			name:        "filter by number",
-			statement:   `db.users.findOne({ age: 35 })`,
-			expectMatch: true,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"carol"`)
-			},
-		},
-		{
-			name:        "filter with no match",
-			statement:   `db.users.findOne({ name: "nobody" })`,
-			expectMatch: false,
-		},
-		{
-			name:        "filter with $gt operator",
-			statement:   `db.users.findOne({ age: { $gt: 30 } })`,
-			expectMatch: true,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"carol"`)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			if tc.expectMatch {
-				require.Equal(t, 1, result.RowCount)
-				if tc.checkResult != nil {
-					tc.checkResult(t, result.Rows[0])
-				}
-			} else {
-				require.Equal(t, 0, result.RowCount)
-			}
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30},
+			bson.M{"name": "bob", "age": 25},
+			bson.M{"name": "carol", "age": 35},
 		})
-	}
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		tests := []struct {
+			name        string
+			statement   string
+			expectMatch bool
+			checkResult func(t *testing.T, row string)
+		}{
+			{
+				name:        "filter by string",
+				statement:   `db.users.findOne({ name: "bob" })`,
+				expectMatch: true,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"bob"`)
+					require.Contains(t, row, `"age": 25`)
+				},
+			},
+			{
+				name:        "filter by number",
+				statement:   `db.users.findOne({ age: 35 })`,
+				expectMatch: true,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"carol"`)
+				},
+			},
+			{
+				name:        "filter with no match",
+				statement:   `db.users.findOne({ name: "nobody" })`,
+				expectMatch: false,
+			},
+			{
+				name:        "filter with $gt operator",
+				statement:   `db.users.findOne({ age: { $gt: 30 } })`,
+				expectMatch: true,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"carol"`)
+				},
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				if tc.expectMatch {
+					require.Equal(t, 1, result.RowCount)
+					if tc.checkResult != nil {
+						tc.checkResult(t, result.Rows[0])
+					}
+				} else {
+					require.Equal(t, 0, result.RowCount)
+				}
+			})
+		}
+	})
 }
 
 func TestFindOneWithOptions(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_options"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_options_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "apple", "price": 1},
-		bson.M{"name": "banana", "price": 2},
-		bson.M{"name": "carrot", "price": 3},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	tests := []struct {
-		name        string
-		statement   string
-		checkResult func(t *testing.T, row string)
-	}{
-		{
-			name:      "sort ascending - returns first",
-			statement: `db.items.findOne().sort({ price: 1 })`,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"apple"`)
-			},
-		},
-		{
-			name:      "sort descending - returns first",
-			statement: `db.items.findOne().sort({ price: -1 })`,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"carrot"`)
-			},
-		},
-		{
-			name:      "skip",
-			statement: `db.items.findOne().sort({ price: 1 }).skip(1)`,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"banana"`)
-			},
-		},
-		{
-			name:      "projection include",
-			statement: `db.items.findOne().projection({ name: 1, _id: 0 })`,
-			checkResult: func(t *testing.T, row string) {
-				require.Contains(t, row, `"name"`)
-				require.NotContains(t, row, `"_id"`)
-				require.NotContains(t, row, `"price"`)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, 1, result.RowCount)
-			tc.checkResult(t, result.Rows[0])
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "apple", "price": 1},
+			bson.M{"name": "banana", "price": 2},
+			bson.M{"name": "carrot", "price": 3},
 		})
-	}
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		tests := []struct {
+			name        string
+			statement   string
+			checkResult func(t *testing.T, row string)
+		}{
+			{
+				name:      "sort ascending - returns first",
+				statement: `db.items.findOne().sort({ price: 1 })`,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"apple"`)
+				},
+			},
+			{
+				name:      "sort descending - returns first",
+				statement: `db.items.findOne().sort({ price: -1 })`,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"carrot"`)
+				},
+			},
+			{
+				name:      "skip",
+				statement: `db.items.findOne().sort({ price: 1 }).skip(1)`,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"banana"`)
+				},
+			},
+			{
+				name:      "projection include",
+				statement: `db.items.findOne().projection({ name: 1, _id: 0 })`,
+				checkResult: func(t *testing.T, row string) {
+					require.Contains(t, row, `"name"`)
+					require.NotContains(t, row, `"_id"`)
+					require.NotContains(t, row, `"price"`)
+				},
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, 1, result.RowCount)
+				tc.checkResult(t, result.Rows[0])
+			})
+		}
+	})
 }
 
 func TestFindWithFilter(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_filter"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_filter_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30, "active": true},
-		bson.M{"name": "bob", "age": 25, "active": false},
-		bson.M{"name": "carol", "age": 35, "active": true},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	tests := []struct {
-		name          string
-		statement     string
-		expectedCount int
-		checkResult   func(t *testing.T, rows []string)
-	}{
-		{
-			name:          "filter by string",
-			statement:     `db.users.find({ name: "alice" })`,
-			expectedCount: 1,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"alice"`)
-			},
-		},
-		{
-			name:          "filter by number",
-			statement:     `db.users.find({ age: 25 })`,
-			expectedCount: 1,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"bob"`)
-			},
-		},
-		{
-			name:          "filter by boolean",
-			statement:     `db.users.find({ active: true })`,
-			expectedCount: 2,
-		},
-		{
-			name:          "filter with $gt operator",
-			statement:     `db.users.find({ age: { $gt: 28 } })`,
-			expectedCount: 2,
-		},
-		{
-			name:          "filter with $lte operator",
-			statement:     `db.users.find({ age: { $lte: 25 } })`,
-			expectedCount: 1,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"bob"`)
-			},
-		},
-		{
-			name:          "filter with multiple conditions",
-			statement:     `db.users.find({ active: true, age: { $gte: 30 } })`,
-			expectedCount: 2,
-		},
-		{
-			name:          "filter with $in operator",
-			statement:     `db.users.find({ name: { $in: ["alice", "bob"] } })`,
-			expectedCount: 2,
-		},
-		{
-			name:          "filter with no matches",
-			statement:     `db.users.find({ name: "nobody" })`,
-			expectedCount: 0,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, tc.expectedCount, result.RowCount)
-			if tc.checkResult != nil && result.RowCount > 0 {
-				tc.checkResult(t, result.Rows)
-			}
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30, "active": true},
+			bson.M{"name": "bob", "age": 25, "active": false},
+			bson.M{"name": "carol", "age": 35, "active": true},
 		})
-	}
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		tests := []struct {
+			name          string
+			statement     string
+			expectedCount int
+			checkResult   func(t *testing.T, rows []string)
+		}{
+			{
+				name:          "filter by string",
+				statement:     `db.users.find({ name: "alice" })`,
+				expectedCount: 1,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"alice"`)
+				},
+			},
+			{
+				name:          "filter by number",
+				statement:     `db.users.find({ age: 25 })`,
+				expectedCount: 1,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"bob"`)
+				},
+			},
+			{
+				name:          "filter by boolean",
+				statement:     `db.users.find({ active: true })`,
+				expectedCount: 2,
+			},
+			{
+				name:          "filter with $gt operator",
+				statement:     `db.users.find({ age: { $gt: 28 } })`,
+				expectedCount: 2,
+			},
+			{
+				name:          "filter with $lte operator",
+				statement:     `db.users.find({ age: { $lte: 25 } })`,
+				expectedCount: 1,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"bob"`)
+				},
+			},
+			{
+				name:          "filter with multiple conditions",
+				statement:     `db.users.find({ active: true, age: { $gte: 30 } })`,
+				expectedCount: 2,
+			},
+			{
+				name:          "filter with $in operator",
+				statement:     `db.users.find({ name: { $in: ["alice", "bob"] } })`,
+				expectedCount: 2,
+			},
+			{
+				name:          "filter with no matches",
+				statement:     `db.users.find({ name: "nobody" })`,
+				expectedCount: 0,
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, tc.expectedCount, result.RowCount)
+				if tc.checkResult != nil && result.RowCount > 0 {
+					tc.checkResult(t, result.Rows)
+				}
+			})
+		}
+	})
 }
 
 func TestFindWithCursorModifications(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_cursor"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_cursor_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "apple", "price": 1, "category": "fruit"},
-		bson.M{"name": "banana", "price": 2, "category": "fruit"},
-		bson.M{"name": "carrot", "price": 3, "category": "vegetable"},
-		bson.M{"name": "date", "price": 4, "category": "fruit"},
-		bson.M{"name": "eggplant", "price": 5, "category": "vegetable"},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	tests := []struct {
-		name          string
-		statement     string
-		expectedCount int
-		checkResult   func(t *testing.T, rows []string)
-	}{
-		{
-			name:          "sort ascending",
-			statement:     `db.items.find().sort({ price: 1 })`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"apple"`)
-				require.Contains(t, rows[4], `"eggplant"`)
-			},
-		},
-		{
-			name:          "sort descending",
-			statement:     `db.items.find().sort({ price: -1 })`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"eggplant"`)
-				require.Contains(t, rows[4], `"apple"`)
-			},
-		},
-		{
-			name:          "limit",
-			statement:     `db.items.find().limit(2)`,
-			expectedCount: 2,
-		},
-		{
-			name:          "skip",
-			statement:     `db.items.find().sort({ price: 1 }).skip(2)`,
-			expectedCount: 3,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"carrot"`)
-			},
-		},
-		{
-			name:          "sort and limit",
-			statement:     `db.items.find().sort({ price: -1 }).limit(3)`,
-			expectedCount: 3,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"eggplant"`)
-				require.Contains(t, rows[2], `"carrot"`)
-			},
-		},
-		{
-			name:          "skip and limit",
-			statement:     `db.items.find().sort({ price: 1 }).skip(1).limit(2)`,
-			expectedCount: 2,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"banana"`)
-				require.Contains(t, rows[1], `"carrot"`)
-			},
-		},
-		{
-			name:          "projection include",
-			statement:     `db.items.find().projection({ name: 1 })`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"name"`)
-				require.Contains(t, rows[0], `"_id"`)
-				require.NotContains(t, rows[0], `"price"`)
-				require.NotContains(t, rows[0], `"category"`)
-			},
-		},
-		{
-			name:          "projection exclude",
-			statement:     `db.items.find().projection({ _id: 0, category: 0 })`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"name"`)
-				require.Contains(t, rows[0], `"price"`)
-				require.NotContains(t, rows[0], `"_id"`)
-				require.NotContains(t, rows[0], `"category"`)
-			},
-		},
-		{
-			name:          "filter with sort and limit",
-			statement:     `db.items.find({ category: "fruit" }).sort({ price: -1 }).limit(2)`,
-			expectedCount: 2,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"date"`)
-				require.Contains(t, rows[1], `"banana"`)
-			},
-		},
-		{
-			name:          "all modifiers combined",
-			statement:     `db.items.find({ category: "fruit" }).sort({ price: 1 }).skip(1).limit(2).projection({ name: 1, price: 1, _id: 0 })`,
-			expectedCount: 2,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"banana"`)
-				require.Contains(t, rows[1], `"date"`)
-				require.NotContains(t, rows[0], `"_id"`)
-				require.NotContains(t, rows[0], `"category"`)
-			},
-		},
-		{
-			name:          "method chain order: limit before sort",
-			statement:     `db.items.find().limit(3).sort({ price: -1 })`,
-			expectedCount: 3,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"eggplant"`)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, tc.expectedCount, result.RowCount)
-			if tc.checkResult != nil && result.RowCount > 0 {
-				tc.checkResult(t, result.Rows)
-			}
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "apple", "price": 1, "category": "fruit"},
+			bson.M{"name": "banana", "price": 2, "category": "fruit"},
+			bson.M{"name": "carrot", "price": 3, "category": "vegetable"},
+			bson.M{"name": "date", "price": 4, "category": "fruit"},
+			bson.M{"name": "eggplant", "price": 5, "category": "vegetable"},
 		})
-	}
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		tests := []struct {
+			name          string
+			statement     string
+			expectedCount int
+			checkResult   func(t *testing.T, rows []string)
+		}{
+			{
+				name:          "sort ascending",
+				statement:     `db.items.find().sort({ price: 1 })`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"apple"`)
+					require.Contains(t, rows[4], `"eggplant"`)
+				},
+			},
+			{
+				name:          "sort descending",
+				statement:     `db.items.find().sort({ price: -1 })`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"eggplant"`)
+					require.Contains(t, rows[4], `"apple"`)
+				},
+			},
+			{
+				name:          "limit",
+				statement:     `db.items.find().limit(2)`,
+				expectedCount: 2,
+			},
+			{
+				name:          "skip",
+				statement:     `db.items.find().sort({ price: 1 }).skip(2)`,
+				expectedCount: 3,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"carrot"`)
+				},
+			},
+			{
+				name:          "sort and limit",
+				statement:     `db.items.find().sort({ price: -1 }).limit(3)`,
+				expectedCount: 3,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"eggplant"`)
+					require.Contains(t, rows[2], `"carrot"`)
+				},
+			},
+			{
+				name:          "skip and limit",
+				statement:     `db.items.find().sort({ price: 1 }).skip(1).limit(2)`,
+				expectedCount: 2,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"banana"`)
+					require.Contains(t, rows[1], `"carrot"`)
+				},
+			},
+			{
+				name:          "projection include",
+				statement:     `db.items.find().projection({ name: 1 })`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"name"`)
+					require.Contains(t, rows[0], `"_id"`)
+					require.NotContains(t, rows[0], `"price"`)
+					require.NotContains(t, rows[0], `"category"`)
+				},
+			},
+			{
+				name:          "projection exclude",
+				statement:     `db.items.find().projection({ _id: 0, category: 0 })`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"name"`)
+					require.Contains(t, rows[0], `"price"`)
+					require.NotContains(t, rows[0], `"_id"`)
+					require.NotContains(t, rows[0], `"category"`)
+				},
+			},
+			{
+				name:          "filter with sort and limit",
+				statement:     `db.items.find({ category: "fruit" }).sort({ price: -1 }).limit(2)`,
+				expectedCount: 2,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"date"`)
+					require.Contains(t, rows[1], `"banana"`)
+				},
+			},
+			{
+				name:          "all modifiers combined",
+				statement:     `db.items.find({ category: "fruit" }).sort({ price: 1 }).skip(1).limit(2).projection({ name: 1, price: 1, _id: 0 })`,
+				expectedCount: 2,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"banana"`)
+					require.Contains(t, rows[1], `"date"`)
+					require.NotContains(t, rows[0], `"_id"`)
+					require.NotContains(t, rows[0], `"category"`)
+				},
+			},
+			{
+				name:          "method chain order: limit before sort",
+				statement:     `db.items.find().limit(3).sort({ price: -1 })`,
+				expectedCount: 3,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"eggplant"`)
+				},
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, tc.expectedCount, result.RowCount)
+				if tc.checkResult != nil && result.RowCount > 0 {
+					tc.checkResult(t, result.Rows)
+				}
+			})
+		}
+	})
 }
 
 func TestFindWithProjectionArg(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_proj_arg"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_proj_arg_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Insert test data
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30, "city": "NYC"},
-		bson.M{"name": "Bob", "age": 25, "city": "LA"},
+		// Insert test data
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30, "city": "NYC"},
+			bson.M{"name": "Bob", "age": 25, "city": "LA"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// find with projection as 2nd argument
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}, { name: 1, _id: 0 })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
+
+		// Verify only 'name' field is returned
+		for _, row := range result.Rows {
+			require.Contains(t, row, "name")
+			require.NotContains(t, row, "age")
+			require.NotContains(t, row, "city")
+		}
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// find with projection as 2nd argument
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}, { name: 1, _id: 0 })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
-
-	// Verify only 'name' field is returned
-	for _, row := range result.Rows {
-		require.Contains(t, row, "name")
-		require.NotContains(t, row, "age")
-		require.NotContains(t, row, "city")
-	}
 }
 
 func TestFindWithHintOption(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_hint"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_hint_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		// Create index
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "name", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// find with hint option (index name)
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}, {}, { hint: "name_1" })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "name", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// find with hint option (index name)
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}, {}, { hint: "name_1" })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestFindWithMaxMinOptions(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_maxmin"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB doesn't support min/max options
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB doesn't support min/max options")
+		}
 
-	ctx := context.Background()
+		dbName := fmt.Sprintf("testdb_find_maxmin_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	coll := client.Database(dbName).Collection("items")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"price": 10},
-		bson.M{"price": 20},
-		bson.M{"price": 30},
-		bson.M{"price": 40},
-		bson.M{"price": 50},
+		ctx := context.Background()
+
+		coll := db.Client.Database(dbName).Collection("items")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"price": 10},
+			bson.M{"price": 20},
+			bson.M{"price": 30},
+			bson.M{"price": 40},
+			bson.M{"price": 50},
+		})
+		require.NoError(t, err)
+
+		// Create index on price field (required for min/max)
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "price", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// find with min and max options (requires hint)
+		result, err := gc.Execute(ctx, dbName, `db.items.find({}, {}, { hint: { price: 1 }, min: { price: 20 }, max: { price: 40 } })`)
+		require.NoError(t, err)
+		// Should return items with price 20 and 30 (max is exclusive)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index on price field (required for min/max)
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "price", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// find with min and max options (requires hint)
-	result, err := gc.Execute(ctx, dbName, `db.items.find({}, {}, { hint: { price: 1 }, min: { price: 20 }, max: { price: 40 } })`)
-	require.NoError(t, err)
-	// Should return items with price 20 and 30 (max is exclusive)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestFindWithMaxTimeMSOption(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_find_maxtime"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_find_maxtime_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice"},
-		bson.M{"name": "Bob"},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice"},
+			bson.M{"name": "Bob"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// find with maxTimeMS option
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}, {}, { maxTimeMS: 5000 })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// find with maxTimeMS option
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}, {}, { maxTimeMS: 5000 })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestFindOneWithProjectionAndOptions(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_proj_opts"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_proj_opts_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30, "city": "NYC"},
-		bson.M{"name": "Bob", "age": 25, "city": "LA"},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30, "city": "NYC"},
+			bson.M{"name": "Bob", "age": 25, "city": "LA"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// findOne with projection as 2nd argument
+		result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, { name: 1, _id: 0 })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
+		require.Contains(t, result.Rows[0], "name")
+		require.NotContains(t, result.Rows[0], "age")
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// findOne with projection as 2nd argument
-	result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, { name: 1, _id: 0 })`)
-	require.NoError(t, err)
-	require.Equal(t, 1, result.RowCount)
-	require.Contains(t, result.Rows[0], "name")
-	require.NotContains(t, result.Rows[0], "age")
 }
 
 func TestFindOneWithHintOption(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_hint"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_hint_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		// Create index
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "name", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// findOne with hint option (index name)
+		result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, {}, { hint: "name_1" })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "name", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// findOne with hint option (index name)
-	result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, {}, { hint: "name_1" })`)
-	require.NoError(t, err)
-	require.Equal(t, 1, result.RowCount)
 }
 
 func TestFindOneWithMaxTimeMSOption(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_findone_maxtime"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_findone_maxtime_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice"},
-		bson.M{"name": "Bob"},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice"},
+			bson.M{"name": "Bob"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// findOne with maxTimeMS option
+		result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, {}, { maxTimeMS: 5000 })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// findOne with maxTimeMS option
-	result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, {}, { maxTimeMS: 5000 })`)
-	require.NoError(t, err)
-	require.Equal(t, 1, result.RowCount)
 }
 
 func TestAggregateBasic(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_basic"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_basic_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "apple", "price": 1, "category": "fruit"},
-		bson.M{"name": "banana", "price": 2, "category": "fruit"},
-		bson.M{"name": "carrot", "price": 3, "category": "vegetable"},
-		bson.M{"name": "date", "price": 4, "category": "fruit"},
-		bson.M{"name": "eggplant", "price": 5, "category": "vegetable"},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	tests := []struct {
-		name          string
-		statement     string
-		expectedCount int
-		checkResult   func(t *testing.T, rows []string)
-	}{
-		{
-			name:          "empty pipeline",
-			statement:     `db.items.aggregate([])`,
-			expectedCount: 5,
-		},
-		{
-			name:          "empty pipeline no args",
-			statement:     `db.items.aggregate()`,
-			expectedCount: 5,
-		},
-		{
-			name:          "$match stage",
-			statement:     `db.items.aggregate([{ $match: { category: "fruit" } }])`,
-			expectedCount: 3,
-		},
-		{
-			name:          "$sort ascending",
-			statement:     `db.items.aggregate([{ $sort: { price: 1 } }])`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"apple"`)
-				require.Contains(t, rows[4], `"eggplant"`)
-			},
-		},
-		{
-			name:          "$sort descending",
-			statement:     `db.items.aggregate([{ $sort: { price: -1 } }])`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"eggplant"`)
-				require.Contains(t, rows[4], `"apple"`)
-			},
-		},
-		{
-			name:          "$limit stage",
-			statement:     `db.items.aggregate([{ $limit: 2 }])`,
-			expectedCount: 2,
-		},
-		{
-			name:          "$skip stage",
-			statement:     `db.items.aggregate([{ $sort: { price: 1 } }, { $skip: 3 }])`,
-			expectedCount: 2,
-		},
-		{
-			name:          "$project include",
-			statement:     `db.items.aggregate([{ $project: { name: 1, _id: 0 } }])`,
-			expectedCount: 5,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"name"`)
-				require.NotContains(t, rows[0], `"_id"`)
-				require.NotContains(t, rows[0], `"price"`)
-			},
-		},
-		{
-			name:          "$count stage",
-			statement:     `db.items.aggregate([{ $count: "total" }])`,
-			expectedCount: 1,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"total": 5`)
-			},
-		},
-		{
-			name:          "multi-stage: match and sort",
-			statement:     `db.items.aggregate([{ $match: { category: "fruit" } }, { $sort: { price: -1 } }])`,
-			expectedCount: 3,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"date"`)
-			},
-		},
-		{
-			name:          "multi-stage: match, sort, limit",
-			statement:     `db.items.aggregate([{ $match: { category: "fruit" } }, { $sort: { price: 1 } }, { $limit: 2 }])`,
-			expectedCount: 2,
-			checkResult: func(t *testing.T, rows []string) {
-				require.Contains(t, rows[0], `"apple"`)
-				require.Contains(t, rows[1], `"banana"`)
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, tc.expectedCount, result.RowCount)
-			if tc.checkResult != nil && result.RowCount > 0 {
-				tc.checkResult(t, result.Rows)
-			}
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "apple", "price": 1, "category": "fruit"},
+			bson.M{"name": "banana", "price": 2, "category": "fruit"},
+			bson.M{"name": "carrot", "price": 3, "category": "vegetable"},
+			bson.M{"name": "date", "price": 4, "category": "fruit"},
+			bson.M{"name": "eggplant", "price": 5, "category": "vegetable"},
 		})
-	}
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		tests := []struct {
+			name          string
+			statement     string
+			expectedCount int
+			checkResult   func(t *testing.T, rows []string)
+		}{
+			{
+				name:          "empty pipeline",
+				statement:     `db.items.aggregate([])`,
+				expectedCount: 5,
+			},
+			{
+				name:          "empty pipeline no args",
+				statement:     `db.items.aggregate()`,
+				expectedCount: 5,
+			},
+			{
+				name:          "$match stage",
+				statement:     `db.items.aggregate([{ $match: { category: "fruit" } }])`,
+				expectedCount: 3,
+			},
+			{
+				name:          "$sort ascending",
+				statement:     `db.items.aggregate([{ $sort: { price: 1 } }])`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"apple"`)
+					require.Contains(t, rows[4], `"eggplant"`)
+				},
+			},
+			{
+				name:          "$sort descending",
+				statement:     `db.items.aggregate([{ $sort: { price: -1 } }])`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"eggplant"`)
+					require.Contains(t, rows[4], `"apple"`)
+				},
+			},
+			{
+				name:          "$limit stage",
+				statement:     `db.items.aggregate([{ $limit: 2 }])`,
+				expectedCount: 2,
+			},
+			{
+				name:          "$skip stage",
+				statement:     `db.items.aggregate([{ $sort: { price: 1 } }, { $skip: 3 }])`,
+				expectedCount: 2,
+			},
+			{
+				name:          "$project include",
+				statement:     `db.items.aggregate([{ $project: { name: 1, _id: 0 } }])`,
+				expectedCount: 5,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"name"`)
+					require.NotContains(t, rows[0], `"_id"`)
+					require.NotContains(t, rows[0], `"price"`)
+				},
+			},
+			{
+				name:          "$count stage",
+				statement:     `db.items.aggregate([{ $count: "total" }])`,
+				expectedCount: 1,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"total": 5`)
+				},
+			},
+			{
+				name:          "multi-stage: match and sort",
+				statement:     `db.items.aggregate([{ $match: { category: "fruit" } }, { $sort: { price: -1 } }])`,
+				expectedCount: 3,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"date"`)
+				},
+			},
+			{
+				name:          "multi-stage: match, sort, limit",
+				statement:     `db.items.aggregate([{ $match: { category: "fruit" } }, { $sort: { price: 1 } }, { $limit: 2 }])`,
+				expectedCount: 2,
+				checkResult: func(t *testing.T, rows []string) {
+					require.Contains(t, rows[0], `"apple"`)
+					require.Contains(t, rows[1], `"banana"`)
+				},
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, tc.expectedCount, result.RowCount)
+				if tc.checkResult != nil && result.RowCount > 0 {
+					tc.checkResult(t, result.Rows)
+				}
+			})
+		}
+	})
 }
 
 func TestAggregateGroup(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_group"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_group_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("sales")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"item": "apple", "quantity": 10, "price": 1.5},
-		bson.M{"item": "banana", "quantity": 5, "price": 2.0},
-		bson.M{"item": "apple", "quantity": 8, "price": 1.5},
-		bson.M{"item": "banana", "quantity": 3, "price": 2.0},
-		bson.M{"item": "carrot", "quantity": 15, "price": 0.5},
-	})
-	require.NoError(t, err)
+		collection := db.Client.Database(dbName).Collection("sales")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"item": "apple", "quantity": 10, "price": 1.5},
+			bson.M{"item": "banana", "quantity": 5, "price": 2.0},
+			bson.M{"item": "apple", "quantity": 8, "price": 1.5},
+			bson.M{"item": "banana", "quantity": 3, "price": 2.0},
+			bson.M{"item": "carrot", "quantity": 15, "price": 0.5},
+		})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	tests := []struct {
-		name          string
-		statement     string
-		expectedCount int
-		checkResult   func(t *testing.T, rows []string)
-	}{
-		{
-			name:          "$group by field",
-			statement:     `db.sales.aggregate([{ $group: { _id: "$item" } }])`,
-			expectedCount: 3,
-		},
-		{
-			name:          "$group with $sum",
-			statement:     `db.sales.aggregate([{ $group: { _id: "$item", totalQuantity: { $sum: "$quantity" } } }])`,
-			expectedCount: 3,
-		},
-		{
-			name:          "$group with $avg",
-			statement:     `db.sales.aggregate([{ $group: { _id: "$item", avgQuantity: { $avg: "$quantity" } } }])`,
-			expectedCount: 3,
-		},
-		{
-			name: "$group with multiple accumulators",
-			statement: `db.sales.aggregate([
+		tests := []struct {
+			name          string
+			statement     string
+			expectedCount int
+			checkResult   func(t *testing.T, rows []string)
+		}{
+			{
+				name:          "$group by field",
+				statement:     `db.sales.aggregate([{ $group: { _id: "$item" } }])`,
+				expectedCount: 3,
+			},
+			{
+				name:          "$group with $sum",
+				statement:     `db.sales.aggregate([{ $group: { _id: "$item", totalQuantity: { $sum: "$quantity" } } }])`,
+				expectedCount: 3,
+			},
+			{
+				name:          "$group with $avg",
+				statement:     `db.sales.aggregate([{ $group: { _id: "$item", avgQuantity: { $avg: "$quantity" } } }])`,
+				expectedCount: 3,
+			},
+			{
+				name: "$group with multiple accumulators",
+				statement: `db.sales.aggregate([
 				{ $group: {
 					_id: "$item",
 					totalQuantity: { $sum: "$quantity" },
@@ -833,223 +856,226 @@ func TestAggregateGroup(t *testing.T) {
 					count: { $sum: 1 }
 				}}
 			])`,
-			expectedCount: 3,
-		},
-		{
-			name: "$group then $sort",
-			statement: `db.sales.aggregate([
+				expectedCount: 3,
+			},
+			{
+				name: "$group then $sort",
+				statement: `db.sales.aggregate([
 				{ $group: { _id: "$item", total: { $sum: "$quantity" } } },
 				{ $sort: { total: -1 } }
 			])`,
-			expectedCount: 3,
-			checkResult: func(t *testing.T, rows []string) {
-				// apple has 18 total, should be first
-				require.Contains(t, rows[0], `"apple"`)
+				expectedCount: 3,
+				checkResult: func(t *testing.T, rows []string) {
+					// apple has 18 total, should be first
+					require.Contains(t, rows[0], `"apple"`)
+				},
 			},
-		},
-	}
+		}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, tc.expectedCount, result.RowCount)
-			if tc.checkResult != nil && result.RowCount > 0 {
-				tc.checkResult(t, result.Rows)
-			}
-		})
-	}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, tc.expectedCount, result.RowCount)
+				if tc.checkResult != nil && result.RowCount > 0 {
+					tc.checkResult(t, result.Rows)
+				}
+			})
+		}
+	})
 }
 
 func TestAggregateCollectionAccess(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_coll_access"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_coll_access_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("my-items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "test1"},
-		bson.M{"name": "test2"},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	tests := []struct {
-		name      string
-		statement string
-	}{
-		{"dot notation", `db.users.aggregate([])`},
-		{"bracket notation", `db["my-items"].aggregate([{ $limit: 1 }])`},
-		{"getCollection", `db.getCollection("my-items").aggregate([{ $limit: 1 }])`},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := gc.Execute(ctx, dbName, tc.statement)
-			require.NoError(t, err)
-			require.NotNil(t, result)
+		collection := db.Client.Database(dbName).Collection("my-items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "test1"},
+			bson.M{"name": "test2"},
 		})
-	}
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		tests := []struct {
+			name      string
+			statement string
+		}{
+			{"dot notation", `db.users.aggregate([])`},
+			{"bracket notation", `db["my-items"].aggregate([{ $limit: 1 }])`},
+			{"getCollection", `db.getCollection("my-items").aggregate([{ $limit: 1 }])`},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := gc.Execute(ctx, dbName, tc.statement)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+			})
+		}
+	})
 }
 
 // TestAggregateFilteredSubset tests the "Filtered Subset" example from MongoDB docs
 // https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/filtered-subset/
 func TestAggregateFilteredSubset(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_filtered"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_filtered_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("persons")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{
-			"person_id":   "6392529400",
-			"firstname":   "Elise",
-			"lastname":    "Smith",
-			"dateofbirth": time.Date(1972, 1, 13, 9, 32, 7, 0, time.UTC),
-			"vocation":    "ENGINEER",
-			"address":     bson.M{"number": 5625, "street": "Tipa Circle", "city": "Wojzinmoj"},
-		},
-		bson.M{
-			"person_id":   "1723338115",
-			"firstname":   "Olive",
-			"lastname":    "Ranieri",
-			"dateofbirth": time.Date(1985, 5, 12, 23, 14, 30, 0, time.UTC),
-			"gender":      "FEMALE",
-			"vocation":    "ENGINEER",
-			"address":     bson.M{"number": 9303, "street": "Mele Circle", "city": "Tobihbo"},
-		},
-		bson.M{
-			"person_id":   "8732762874",
-			"firstname":   "Toni",
-			"lastname":    "Jones",
-			"dateofbirth": time.Date(1991, 11, 23, 16, 53, 56, 0, time.UTC),
-			"vocation":    "POLITICIAN",
-			"address":     bson.M{"number": 1, "street": "High Street", "city": "Upper Abbeywoodington"},
-		},
-		bson.M{
-			"person_id":   "7363629563",
-			"firstname":   "Bert",
-			"lastname":    "Gooding",
-			"dateofbirth": time.Date(1941, 4, 7, 22, 11, 52, 0, time.UTC),
-			"vocation":    "FLORIST",
-			"address":     bson.M{"number": 13, "street": "Upper Bold Road", "city": "Redringtonville"},
-		},
-		bson.M{
-			"person_id":   "1029648329",
-			"firstname":   "Sophie",
-			"lastname":    "Celements",
-			"dateofbirth": time.Date(1959, 7, 6, 17, 35, 45, 0, time.UTC),
-			"vocation":    "ENGINEER",
-			"address":     bson.M{"number": 5, "street": "Innings Close", "city": "Basilbridge"},
-		},
-		bson.M{
-			"person_id":   "7363626383",
-			"firstname":   "Carl",
-			"lastname":    "Simmons",
-			"dateofbirth": time.Date(1998, 12, 26, 13, 13, 55, 0, time.UTC),
-			"vocation":    "ENGINEER",
-			"address":     bson.M{"number": 187, "street": "Hillside Road", "city": "Kenningford"},
-		},
-	})
-	require.NoError(t, err)
+		collection := db.Client.Database(dbName).Collection("persons")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{
+				"person_id":   "6392529400",
+				"firstname":   "Elise",
+				"lastname":    "Smith",
+				"dateofbirth": time.Date(1972, 1, 13, 9, 32, 7, 0, time.UTC),
+				"vocation":    "ENGINEER",
+				"address":     bson.M{"number": 5625, "street": "Tipa Circle", "city": "Wojzinmoj"},
+			},
+			bson.M{
+				"person_id":   "1723338115",
+				"firstname":   "Olive",
+				"lastname":    "Ranieri",
+				"dateofbirth": time.Date(1985, 5, 12, 23, 14, 30, 0, time.UTC),
+				"gender":      "FEMALE",
+				"vocation":    "ENGINEER",
+				"address":     bson.M{"number": 9303, "street": "Mele Circle", "city": "Tobihbo"},
+			},
+			bson.M{
+				"person_id":   "8732762874",
+				"firstname":   "Toni",
+				"lastname":    "Jones",
+				"dateofbirth": time.Date(1991, 11, 23, 16, 53, 56, 0, time.UTC),
+				"vocation":    "POLITICIAN",
+				"address":     bson.M{"number": 1, "street": "High Street", "city": "Upper Abbeywoodington"},
+			},
+			bson.M{
+				"person_id":   "7363629563",
+				"firstname":   "Bert",
+				"lastname":    "Gooding",
+				"dateofbirth": time.Date(1941, 4, 7, 22, 11, 52, 0, time.UTC),
+				"vocation":    "FLORIST",
+				"address":     bson.M{"number": 13, "street": "Upper Bold Road", "city": "Redringtonville"},
+			},
+			bson.M{
+				"person_id":   "1029648329",
+				"firstname":   "Sophie",
+				"lastname":    "Celements",
+				"dateofbirth": time.Date(1959, 7, 6, 17, 35, 45, 0, time.UTC),
+				"vocation":    "ENGINEER",
+				"address":     bson.M{"number": 5, "street": "Innings Close", "city": "Basilbridge"},
+			},
+			bson.M{
+				"person_id":   "7363626383",
+				"firstname":   "Carl",
+				"lastname":    "Simmons",
+				"dateofbirth": time.Date(1998, 12, 26, 13, 13, 55, 0, time.UTC),
+				"vocation":    "ENGINEER",
+				"address":     bson.M{"number": 187, "street": "Hillside Road", "city": "Kenningford"},
+			},
+		})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Find 3 youngest engineers
-	statement := `db.persons.aggregate([
+		// Find 3 youngest engineers
+		statement := `db.persons.aggregate([
 		{ $match: { vocation: "ENGINEER" } },
 		{ $sort: { dateofbirth: -1 } },
 		{ $limit: 3 },
 		{ $unset: ["_id", "vocation", "address"] }
 	])`
 
-	result, err := gc.Execute(ctx, dbName, statement)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 3, result.RowCount)
+		result, err := gc.Execute(ctx, dbName, statement)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 3, result.RowCount)
 
-	// Carl (1998) should be first (youngest)
-	require.Contains(t, result.Rows[0], `"Carl"`)
-	// Olive (1985) should be second
-	require.Contains(t, result.Rows[1], `"Olive"`)
-	// Elise (1972) should be third
-	require.Contains(t, result.Rows[2], `"Elise"`)
+		// Carl (1998) should be first (youngest)
+		require.Contains(t, result.Rows[0], `"Carl"`)
+		// Olive (1985) should be second
+		require.Contains(t, result.Rows[1], `"Olive"`)
+		// Elise (1972) should be third
+		require.Contains(t, result.Rows[2], `"Elise"`)
 
-	// Verify _id, vocation, and address are excluded
-	require.NotContains(t, result.Rows[0], `"_id"`)
-	require.NotContains(t, result.Rows[0], `"vocation"`)
-	require.NotContains(t, result.Rows[0], `"address"`)
+		// Verify _id, vocation, and address are excluded
+		require.NotContains(t, result.Rows[0], `"_id"`)
+		require.NotContains(t, result.Rows[0], `"vocation"`)
+		require.NotContains(t, result.Rows[0], `"address"`)
+	})
 }
 
 // TestAggregateGroupAndTotal tests the "Group and Total" example from MongoDB docs
 // https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/group-and-total/
 func TestAggregateGroupAndTotal(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_group_total"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_group_total_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("orders")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{
-			"customer_id": "elise_smith@myemail.com",
-			"orderdate":   time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
-			"value":       231.43,
-		},
-		bson.M{
-			"customer_id": "elise_smith@myemail.com",
-			"orderdate":   time.Date(2020, 1, 13, 9, 32, 7, 0, time.UTC),
-			"value":       99.99,
-		},
-		bson.M{
-			"customer_id": "oranieri@warmmail.com",
-			"orderdate":   time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
-			"value":       63.13,
-		},
-		bson.M{
-			"customer_id": "tj@wheresmyemail.com",
-			"orderdate":   time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
-			"value":       2.01,
-		},
-		bson.M{
-			"customer_id": "tj@wheresmyemail.com",
-			"orderdate":   time.Date(2020, 11, 23, 22, 56, 53, 0, time.UTC),
-			"value":       187.99,
-		},
-		bson.M{
-			"customer_id": "tj@wheresmyemail.com",
-			"orderdate":   time.Date(2020, 8, 18, 23, 4, 48, 0, time.UTC),
-			"value":       4.59,
-		},
-		bson.M{
-			"customer_id": "elise_smith@myemail.com",
-			"orderdate":   time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
-			"value":       48.50,
-		},
-		bson.M{
-			"customer_id": "tj@wheresmyemail.com",
-			"orderdate":   time.Date(2021, 2, 28, 7, 49, 32, 0, time.UTC),
-			"value":       1024.89,
-		},
-		bson.M{
-			"customer_id": "elise_smith@myemail.com",
-			"orderdate":   time.Date(2020, 10, 3, 13, 49, 44, 0, time.UTC),
-			"value":       102.24,
-		},
-	})
-	require.NoError(t, err)
+		collection := db.Client.Database(dbName).Collection("orders")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{
+				"customer_id": "elise_smith@myemail.com",
+				"orderdate":   time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
+				"value":       231.43,
+			},
+			bson.M{
+				"customer_id": "elise_smith@myemail.com",
+				"orderdate":   time.Date(2020, 1, 13, 9, 32, 7, 0, time.UTC),
+				"value":       99.99,
+			},
+			bson.M{
+				"customer_id": "oranieri@warmmail.com",
+				"orderdate":   time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
+				"value":       63.13,
+			},
+			bson.M{
+				"customer_id": "tj@wheresmyemail.com",
+				"orderdate":   time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
+				"value":       2.01,
+			},
+			bson.M{
+				"customer_id": "tj@wheresmyemail.com",
+				"orderdate":   time.Date(2020, 11, 23, 22, 56, 53, 0, time.UTC),
+				"value":       187.99,
+			},
+			bson.M{
+				"customer_id": "tj@wheresmyemail.com",
+				"orderdate":   time.Date(2020, 8, 18, 23, 4, 48, 0, time.UTC),
+				"value":       4.59,
+			},
+			bson.M{
+				"customer_id": "elise_smith@myemail.com",
+				"orderdate":   time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
+				"value":       48.50,
+			},
+			bson.M{
+				"customer_id": "tj@wheresmyemail.com",
+				"orderdate":   time.Date(2021, 2, 28, 7, 49, 32, 0, time.UTC),
+				"value":       1024.89,
+			},
+			bson.M{
+				"customer_id": "elise_smith@myemail.com",
+				"orderdate":   time.Date(2020, 10, 3, 13, 49, 44, 0, time.UTC),
+				"value":       102.24,
+			},
+		})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Group orders by customer for year 2020
-	statement := `db.orders.aggregate([
+		// Group orders by customer for year 2020
+		statement := `db.orders.aggregate([
 		{ $match: {
 			orderdate: {
 				$gte: ISODate("2020-01-01T00:00:00Z"),
@@ -1068,67 +1094,68 @@ func TestAggregateGroupAndTotal(t *testing.T) {
 		{ $unset: ["_id"] }
 	])`
 
-	result, err := gc.Execute(ctx, dbName, statement)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 3, result.RowCount)
+		result, err := gc.Execute(ctx, dbName, statement)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 3, result.RowCount)
 
-	// oranieri should be first (earliest order in 2020: Jan 1)
-	require.Contains(t, result.Rows[0], `"oranieri@warmmail.com"`)
+		// oranieri should be first (earliest order in 2020: Jan 1)
+		require.Contains(t, result.Rows[0], `"oranieri@warmmail.com"`)
 
-	// Verify structure
-	require.Contains(t, result.Rows[0], `"customer_id"`)
-	require.Contains(t, result.Rows[0], `"total_value"`)
-	require.Contains(t, result.Rows[0], `"total_orders"`)
-	require.NotContains(t, result.Rows[0], `"_id"`)
+		// Verify structure
+		require.Contains(t, result.Rows[0], `"customer_id"`)
+		require.Contains(t, result.Rows[0], `"total_value"`)
+		require.Contains(t, result.Rows[0], `"total_orders"`)
+		require.NotContains(t, result.Rows[0], `"_id"`)
+	})
 }
 
 // TestAggregateUnwindArrays tests the "Unpack Arrays" example from MongoDB docs
 // https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/unpack-arrays/
 func TestAggregateUnwindArrays(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_unwind"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_unwind_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("orders")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{
-			"order_id": 6363763262239,
-			"products": []bson.M{
-				{"prod_id": "abc12345", "name": "Asus Laptop", "price": 431.43},
-				{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 22.13},
+		collection := db.Client.Database(dbName).Collection("orders")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{
+				"order_id": 6363763262239,
+				"products": []bson.M{
+					{"prod_id": "abc12345", "name": "Asus Laptop", "price": 431.43},
+					{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 22.13},
+				},
 			},
-		},
-		bson.M{
-			"order_id": 1197372932325,
-			"products": []bson.M{
-				{"prod_id": "abc12345", "name": "Asus Laptop", "price": 429.99},
+			bson.M{
+				"order_id": 1197372932325,
+				"products": []bson.M{
+					{"prod_id": "abc12345", "name": "Asus Laptop", "price": 429.99},
+				},
 			},
-		},
-		bson.M{
-			"order_id": 9812343774839,
-			"products": []bson.M{
-				{"prod_id": "pqr88223", "name": "Morphy Richards Food Mixer", "price": 431.43},
-				{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 21.78},
+			bson.M{
+				"order_id": 9812343774839,
+				"products": []bson.M{
+					{"prod_id": "pqr88223", "name": "Morphy Richards Food Mixer", "price": 431.43},
+					{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 21.78},
+				},
 			},
-		},
-		bson.M{
-			"order_id": 4433997244387,
-			"products": []bson.M{
-				{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 23.43},
-				{"prod_id": "jkl77336", "name": "Picky Pencil Sharpener", "price": 0.67},
-				{"prod_id": "xyz11228", "name": "Russell Hobbs Chrome Kettle", "price": 15.76},
+			bson.M{
+				"order_id": 4433997244387,
+				"products": []bson.M{
+					{"prod_id": "def45678", "name": "Karcher Hose Set", "price": 23.43},
+					{"prod_id": "jkl77336", "name": "Picky Pencil Sharpener", "price": 0.67},
+					{"prod_id": "xyz11228", "name": "Russell Hobbs Chrome Kettle", "price": 15.76},
+				},
 			},
-		},
-	})
-	require.NoError(t, err)
+		})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Unpack products, filter by price > 15, group by product
-	statement := `db.orders.aggregate([
+		// Unpack products, filter by price > 15, group by product
+		statement := `db.orders.aggregate([
 		{ $unwind: { path: "$products" } },
 		{ $match: { "products.price": { $gt: 15 } } },
 		{ $group: {
@@ -1141,92 +1168,93 @@ func TestAggregateUnwindArrays(t *testing.T) {
 		{ $unset: ["_id"] }
 	])`
 
-	result, err := gc.Execute(ctx, dbName, statement)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// Should have: abc12345 (2x), def45678 (3x but all > 15), pqr88223 (1x), xyz11228 (1x)
-	require.Equal(t, 4, result.RowCount)
+		result, err := gc.Execute(ctx, dbName, statement)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		// Should have: abc12345 (2x), def45678 (3x but all > 15), pqr88223 (1x), xyz11228 (1x)
+		require.Equal(t, 4, result.RowCount)
 
-	// Verify structure
-	require.Contains(t, result.Rows[0], `"product_id"`)
-	require.Contains(t, result.Rows[0], `"product"`)
-	require.Contains(t, result.Rows[0], `"total_value"`)
-	require.Contains(t, result.Rows[0], `"quantity"`)
+		// Verify structure
+		require.Contains(t, result.Rows[0], `"product_id"`)
+		require.Contains(t, result.Rows[0], `"product"`)
+		require.Contains(t, result.Rows[0], `"total_value"`)
+		require.Contains(t, result.Rows[0], `"quantity"`)
+	})
 }
 
 // TestAggregateOneToOneJoin tests the "One-to-One Join" example from MongoDB docs
 // https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/one-to-one-join/
 func TestAggregateOneToOneJoin(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_join_1to1"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_join_1to1_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create products collection
-	productsCollection := client.Database(dbName).Collection("products")
-	_, err := productsCollection.InsertMany(ctx, []any{
-		bson.M{
-			"id":          "a1b2c3d4",
-			"name":        "Asus Laptop",
-			"category":    "ELECTRONICS",
-			"description": "Good value laptop for students",
-		},
-		bson.M{
-			"id":          "z9y8x7w6",
-			"name":        "The Day Of The Triffids",
-			"category":    "BOOKS",
-			"description": "Classic post-apocalyptic novel",
-		},
-		bson.M{
-			"id":          "ff11gg22hh33",
-			"name":        "Morphy Richards Food Mixer",
-			"category":    "KITCHENWARE",
-			"description": "Luxury mixer turning good cakes into great",
-		},
-		bson.M{
-			"id":          "pqr678st",
-			"name":        "Karcher Hose Set",
-			"category":    "GARDEN",
-			"description": "Hose + nozzles + winder for tidy storage",
-		},
-	})
-	require.NoError(t, err)
+		// Create products collection
+		productsCollection := db.Client.Database(dbName).Collection("products")
+		_, err := productsCollection.InsertMany(ctx, []any{
+			bson.M{
+				"id":          "a1b2c3d4",
+				"name":        "Asus Laptop",
+				"category":    "ELECTRONICS",
+				"description": "Good value laptop for students",
+			},
+			bson.M{
+				"id":          "z9y8x7w6",
+				"name":        "The Day Of The Triffids",
+				"category":    "BOOKS",
+				"description": "Classic post-apocalyptic novel",
+			},
+			bson.M{
+				"id":          "ff11gg22hh33",
+				"name":        "Morphy Richards Food Mixer",
+				"category":    "KITCHENWARE",
+				"description": "Luxury mixer turning good cakes into great",
+			},
+			bson.M{
+				"id":          "pqr678st",
+				"name":        "Karcher Hose Set",
+				"category":    "GARDEN",
+				"description": "Hose + nozzles + winder for tidy storage",
+			},
+		})
+		require.NoError(t, err)
 
-	// Create orders collection
-	ordersCollection := client.Database(dbName).Collection("orders")
-	_, err = ordersCollection.InsertMany(ctx, []any{
-		bson.M{
-			"customer_id": "elise_smith@myemail.com",
-			"orderdate":   time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
-			"product_id":  "a1b2c3d4",
-			"value":       431.43,
-		},
-		bson.M{
-			"customer_id": "tj@wheresmyemail.com",
-			"orderdate":   time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
-			"product_id":  "z9y8x7w6",
-			"value":       5.01,
-		},
-		bson.M{
-			"customer_id": "oranieri@warmmail.com",
-			"orderdate":   time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
-			"product_id":  "ff11gg22hh33",
-			"value":       63.13,
-		},
-		bson.M{
-			"customer_id": "jjones@tepidmail.com",
-			"orderdate":   time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
-			"product_id":  "a1b2c3d4",
-			"value":       429.65,
-		},
-	})
-	require.NoError(t, err)
+		// Create orders collection
+		ordersCollection := db.Client.Database(dbName).Collection("orders")
+		_, err = ordersCollection.InsertMany(ctx, []any{
+			bson.M{
+				"customer_id": "elise_smith@myemail.com",
+				"orderdate":   time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
+				"product_id":  "a1b2c3d4",
+				"value":       431.43,
+			},
+			bson.M{
+				"customer_id": "tj@wheresmyemail.com",
+				"orderdate":   time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
+				"product_id":  "z9y8x7w6",
+				"value":       5.01,
+			},
+			bson.M{
+				"customer_id": "oranieri@warmmail.com",
+				"orderdate":   time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
+				"product_id":  "ff11gg22hh33",
+				"value":       63.13,
+			},
+			bson.M{
+				"customer_id": "jjones@tepidmail.com",
+				"orderdate":   time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
+				"product_id":  "a1b2c3d4",
+				"value":       429.65,
+			},
+		})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Join orders to products
-	statement := `db.orders.aggregate([
+		// Join orders to products
+		statement := `db.orders.aggregate([
 		{ $match: {
 			orderdate: {
 				$gte: ISODate("2020-01-01T00:00:00Z"),
@@ -1247,107 +1275,113 @@ func TestAggregateOneToOneJoin(t *testing.T) {
 		{ $unset: ["_id", "product_id", "product_mapping"] }
 	])`
 
-	result, err := gc.Execute(ctx, dbName, statement)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 3, result.RowCount) // Only 2020 orders: elise, oranieri, jjones
+		result, err := gc.Execute(ctx, dbName, statement)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 3, result.RowCount) // Only 2020 orders: elise, oranieri, jjones
 
-	// Verify joined fields exist
-	require.Contains(t, result.Rows[0], `"product_name"`)
-	require.Contains(t, result.Rows[0], `"product_category"`)
-	require.NotContains(t, result.Rows[0], `"_id"`)
-	require.NotContains(t, result.Rows[0], `"product_mapping"`)
+		// Verify joined fields exist
+		require.Contains(t, result.Rows[0], `"product_name"`)
+		require.Contains(t, result.Rows[0], `"product_category"`)
+		require.NotContains(t, result.Rows[0], `"_id"`)
+		require.NotContains(t, result.Rows[0], `"product_mapping"`)
+	})
 }
 
 // TestAggregateMultiFieldJoin tests the "Multi-Field Join" example from MongoDB docs
 // https://www.mongodb.com/docs/manual/tutorial/aggregation-examples/multi-field-join/
 func TestAggregateMultiFieldJoin(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_join_multi"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB doesn't support $lookup with let/pipeline
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB doesn't support $lookup with let/pipeline")
+		}
 
-	ctx := context.Background()
+		dbName := fmt.Sprintf("testdb_agg_join_multi_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	// Create products collection
-	productsCollection := client.Database(dbName).Collection("products")
-	_, err := productsCollection.InsertMany(ctx, []any{
-		bson.M{
-			"name":        "Asus Laptop",
-			"variation":   "Ultra HD",
-			"category":    "ELECTRONICS",
-			"description": "Great for watching movies",
-		},
-		bson.M{
-			"name":        "Asus Laptop",
-			"variation":   "Normal Display",
-			"category":    "ELECTRONICS",
-			"description": "Good value laptop for students",
-		},
-		bson.M{
-			"name":        "The Day Of The Triffids",
-			"variation":   "1st Edition",
-			"category":    "BOOKS",
-			"description": "Classic post-apocalyptic novel",
-		},
-		bson.M{
-			"name":        "The Day Of The Triffids",
-			"variation":   "2nd Edition",
-			"category":    "BOOKS",
-			"description": "Classic post-apocalyptic novel",
-		},
-		bson.M{
-			"name":        "Morphy Richards Food Mixer",
-			"variation":   "Deluxe",
-			"category":    "KITCHENWARE",
-			"description": "Luxury mixer turning good cakes into great",
-		},
-		bson.M{
-			"name":        "Karcher Hose Set",
-			"variation":   "Full Monty",
-			"category":    "GARDEN",
-			"description": "Hose + nozzles + winder for tidy storage",
-		},
-	})
-	require.NoError(t, err)
+		ctx := context.Background()
 
-	// Create orders collection
-	ordersCollection := client.Database(dbName).Collection("orders")
-	_, err = ordersCollection.InsertMany(ctx, []any{
-		bson.M{
-			"customer_id":       "elise_smith@myemail.com",
-			"orderdate":         time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
-			"product_name":      "Asus Laptop",
-			"product_variation": "Normal Display",
-			"value":             431.43,
-		},
-		bson.M{
-			"customer_id":       "tj@wheresmyemail.com",
-			"orderdate":         time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
-			"product_name":      "The Day Of The Triffids",
-			"product_variation": "2nd Edition",
-			"value":             5.01,
-		},
-		bson.M{
-			"customer_id":       "oranieri@warmmail.com",
-			"orderdate":         time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
-			"product_name":      "Morphy Richards Food Mixer",
-			"product_variation": "Deluxe",
-			"value":             63.13,
-		},
-		bson.M{
-			"customer_id":       "jjones@tepidmail.com",
-			"orderdate":         time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
-			"product_name":      "Asus Laptop",
-			"product_variation": "Normal Display",
-			"value":             429.65,
-		},
-	})
-	require.NoError(t, err)
+		// Create products collection
+		productsCollection := db.Client.Database(dbName).Collection("products")
+		_, err := productsCollection.InsertMany(ctx, []any{
+			bson.M{
+				"name":        "Asus Laptop",
+				"variation":   "Ultra HD",
+				"category":    "ELECTRONICS",
+				"description": "Great for watching movies",
+			},
+			bson.M{
+				"name":        "Asus Laptop",
+				"variation":   "Normal Display",
+				"category":    "ELECTRONICS",
+				"description": "Good value laptop for students",
+			},
+			bson.M{
+				"name":        "The Day Of The Triffids",
+				"variation":   "1st Edition",
+				"category":    "BOOKS",
+				"description": "Classic post-apocalyptic novel",
+			},
+			bson.M{
+				"name":        "The Day Of The Triffids",
+				"variation":   "2nd Edition",
+				"category":    "BOOKS",
+				"description": "Classic post-apocalyptic novel",
+			},
+			bson.M{
+				"name":        "Morphy Richards Food Mixer",
+				"variation":   "Deluxe",
+				"category":    "KITCHENWARE",
+				"description": "Luxury mixer turning good cakes into great",
+			},
+			bson.M{
+				"name":        "Karcher Hose Set",
+				"variation":   "Full Monty",
+				"category":    "GARDEN",
+				"description": "Hose + nozzles + winder for tidy storage",
+			},
+		})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		// Create orders collection
+		ordersCollection := db.Client.Database(dbName).Collection("orders")
+		_, err = ordersCollection.InsertMany(ctx, []any{
+			bson.M{
+				"customer_id":       "elise_smith@myemail.com",
+				"orderdate":         time.Date(2020, 5, 30, 8, 35, 52, 0, time.UTC),
+				"product_name":      "Asus Laptop",
+				"product_variation": "Normal Display",
+				"value":             431.43,
+			},
+			bson.M{
+				"customer_id":       "tj@wheresmyemail.com",
+				"orderdate":         time.Date(2019, 5, 28, 19, 13, 32, 0, time.UTC),
+				"product_name":      "The Day Of The Triffids",
+				"product_variation": "2nd Edition",
+				"value":             5.01,
+			},
+			bson.M{
+				"customer_id":       "oranieri@warmmail.com",
+				"orderdate":         time.Date(2020, 1, 1, 8, 25, 37, 0, time.UTC),
+				"product_name":      "Morphy Richards Food Mixer",
+				"product_variation": "Deluxe",
+				"value":             63.13,
+			},
+			bson.M{
+				"customer_id":       "jjones@tepidmail.com",
+				"orderdate":         time.Date(2020, 12, 26, 8, 55, 46, 0, time.UTC),
+				"product_name":      "Asus Laptop",
+				"product_variation": "Normal Display",
+				"value":             429.65,
+			},
+		})
+		require.NoError(t, err)
 
-	// Multi-field join using $lookup with let and pipeline
-	statement := `db.products.aggregate([
+		gc := gomongo.NewClient(db.Client)
+
+		// Multi-field join using $lookup with let and pipeline
+		statement := `db.products.aggregate([
 		{ $lookup: {
 			from: "orders",
 			let: { prdname: "$name", prdvartn: "$variation" },
@@ -1374,911 +1408,1129 @@ func TestAggregateMultiFieldJoin(t *testing.T) {
 		{ $unset: ["_id"] }
 	])`
 
-	result, err := gc.Execute(ctx, dbName, statement)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// Should have: Asus Laptop Normal Display (2 orders), Morphy Richards (1 order)
-	require.Equal(t, 2, result.RowCount)
+		result, err := gc.Execute(ctx, dbName, statement)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		// Should have: Asus Laptop Normal Display (2 orders), Morphy Richards (1 order)
+		require.Equal(t, 2, result.RowCount)
 
-	// Verify structure
-	require.Contains(t, result.Rows[0], `"orders"`)
-	require.Contains(t, result.Rows[0], `"name"`)
-	require.Contains(t, result.Rows[0], `"variation"`)
-	require.NotContains(t, result.Rows[0], `"_id"`)
+		// Verify structure
+		require.Contains(t, result.Rows[0], `"orders"`)
+		require.Contains(t, result.Rows[0], `"name"`)
+		require.Contains(t, result.Rows[0], `"variation"`)
+		require.NotContains(t, result.Rows[0], `"_id"`)
+	})
 }
 
 func TestAggregateWithOptions(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_options"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_options_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// aggregate with maxTimeMS option
+		result, err := gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { maxTimeMS: 5000 })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// aggregate with maxTimeMS option
-	result, err := gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { maxTimeMS: 5000 })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestAggregateWithHintOption(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_hint"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_hint_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		// Create index on age field
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "age", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// aggregate with hint option (index name)
+		result, err := gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: "age_1" })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
+
+		// aggregate with hint option (index spec)
+		result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: { age: 1 } })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index on age field
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "age", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// aggregate with hint option (index name)
-	result, err := gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: "age_1" })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
-
-	// aggregate with hint option (index spec)
-	result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: { age: 1 } })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestAggregateTooManyArguments(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_agg_too_many_args"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_agg_too_many_args_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	_, err := gc.Execute(ctx, dbName, `db.users.aggregate([], {}, "extra")`)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "aggregate() takes at most 2 arguments")
+		_, err := gc.Execute(ctx, dbName, `db.users.aggregate([], {}, "extra")`)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "aggregate() takes at most 2 arguments")
+	})
 }
 
 func TestGetIndexes(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_get_indexes"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_get_indexes_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with a document (this creates the default _id index)
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com"})
-	require.NoError(t, err)
+		// Create a collection with a document (this creates the default _id index)
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com"})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Test getIndexes - should return at least the _id index
-	result, err := gc.Execute(ctx, dbName, "db.users.getIndexes()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.GreaterOrEqual(t, result.RowCount, 1)
+		// Test getIndexes - should return at least the _id index
+		result, err := gc.Execute(ctx, dbName, "db.users.getIndexes()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.GreaterOrEqual(t, result.RowCount, 1)
 
-	// Verify the _id index exists
-	found := false
-	for _, row := range result.Rows {
-		if strings.Contains(row, `"name": "_id_"`) {
-			found = true
-			break
+		// Verify the _id index exists
+		found := false
+		for _, row := range result.Rows {
+			if strings.Contains(row, `"name": "_id_"`) {
+				found = true
+				break
+			}
 		}
-	}
-	require.True(t, found, "expected _id_ index")
+		require.True(t, found, "expected _id_ index")
+	})
 }
 
 func TestGetIndexesWithCustomIndex(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_indexes_custom"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_indexes_custom_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection and add a custom index
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com"})
-	require.NoError(t, err)
+		// Create a collection and add a custom index
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com"})
+		require.NoError(t, err)
 
-	// Create an index on the email field
-	_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "email", Value: 1}},
+		// Create an index on the email field
+		_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "email", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		result, err := gc.Execute(ctx, dbName, "db.users.getIndexes()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 2, result.RowCount) // _id index + email index
+
+		// Verify both indexes exist
+		hasIdIndex := false
+		hasEmailIndex := false
+		for _, row := range result.Rows {
+			if strings.Contains(row, `"name": "_id_"`) {
+				hasIdIndex = true
+			}
+			if strings.Contains(row, `"email"`) {
+				hasEmailIndex = true
+			}
+		}
+		require.True(t, hasIdIndex, "expected _id_ index")
+		require.True(t, hasEmailIndex, "expected email index")
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	result, err := gc.Execute(ctx, dbName, "db.users.getIndexes()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 2, result.RowCount) // _id index + email index
-
-	// Verify both indexes exist
-	hasIdIndex := false
-	hasEmailIndex := false
-	for _, row := range result.Rows {
-		if strings.Contains(row, `"name": "_id_"`) {
-			hasIdIndex = true
-		}
-		if strings.Contains(row, `"email"`) {
-			hasEmailIndex = true
-		}
-	}
-	require.True(t, hasIdIndex, "expected _id_ index")
-	require.True(t, hasEmailIndex, "expected email index")
 }
 
 func TestGetIndexesBracketNotation(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_indexes_bracket"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_indexes_bracket_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with hyphenated name
-	collection := client.Database(dbName).Collection("user-logs")
-	_, err := collection.InsertOne(ctx, bson.M{"message": "test"})
-	require.NoError(t, err)
+		// Create a collection with hyphenated name
+		collection := db.Client.Database(dbName).Collection("user-logs")
+		_, err := collection.InsertOne(ctx, bson.M{"message": "test"})
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Test with bracket notation
-	result, err := gc.Execute(ctx, dbName, `db["user-logs"].getIndexes()`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.GreaterOrEqual(t, result.RowCount, 1)
+		// Test with bracket notation
+		result, err := gc.Execute(ctx, dbName, `db["user-logs"].getIndexes()`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.GreaterOrEqual(t, result.RowCount, 1)
 
-	// Verify the _id index exists
-	require.Contains(t, result.Rows[0], `"name": "_id_"`)
+		// Verify the _id index exists
+		require.Contains(t, result.Rows[0], `"name": "_id_"`)
+	})
 }
 
 func TestCountDocuments(t *testing.T) {
-	dbName := "testdb_count"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30},
-		bson.M{"name": "bob", "age": 25},
-		bson.M{"name": "charlie", "age": 35},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30},
+			bson.M{"name": "bob", "age": 25},
+			bson.M{"name": "charlie", "age": 35},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test countDocuments without filter
+		result, err := gc.Execute(ctx, dbName, "db.users.countDocuments()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, "3", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test countDocuments without filter
-	result, err := gc.Execute(ctx, dbName, "db.users.countDocuments()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
-	require.Equal(t, "3", result.Rows[0])
 }
 
 func TestCountDocumentsWithFilter(t *testing.T) {
-	dbName := "testdb_count_filter"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_filter_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30, "status": "active"},
-		bson.M{"name": "bob", "age": 25, "status": "inactive"},
-		bson.M{"name": "charlie", "age": 35, "status": "active"},
-		bson.M{"name": "diana", "age": 28, "status": "active"},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30, "status": "active"},
+			bson.M{"name": "bob", "age": 25, "status": "inactive"},
+			bson.M{"name": "charlie", "age": 35, "status": "active"},
+			bson.M{"name": "diana", "age": 28, "status": "active"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test countDocuments with filter
+		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" })`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, "3", result.Rows[0])
+
+		// Test with comparison operator
+		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({ age: { $gte: 30 } })`)
+		require.NoError(t, err)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test countDocuments with filter
-	result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" })`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
-	require.Equal(t, "3", result.Rows[0])
-
-	// Test with comparison operator
-	result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({ age: { $gte: 30 } })`)
-	require.NoError(t, err)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestCountDocumentsEmptyCollection(t *testing.T) {
-	dbName := "testdb_count_empty"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_empty_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Test countDocuments on empty/non-existent collection
-	result, err := gc.Execute(ctx, dbName, "db.users.countDocuments()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
-	require.Equal(t, "0", result.Rows[0])
+		// Test countDocuments on empty/non-existent collection
+		result, err := gc.Execute(ctx, dbName, "db.users.countDocuments()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, "0", result.Rows[0])
+	})
 }
 
 func TestCountDocumentsWithEmptyFilter(t *testing.T) {
-	dbName := "testdb_count_empty_filter"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_empty_filter_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"item": "a"},
-		bson.M{"item": "b"},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"item": "a"},
+			bson.M{"item": "b"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test countDocuments with empty filter {}
+		result, err := gc.Execute(ctx, dbName, "db.items.countDocuments({})")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test countDocuments with empty filter {}
-	result, err := gc.Execute(ctx, dbName, "db.items.countDocuments({})")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestCountDocumentsWithOptions(t *testing.T) {
-	dbName := "testdb_count_options"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_options_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "age": 30},
-		bson.M{"name": "bob", "age": 25},
-		bson.M{"name": "charlie", "age": 35},
-		bson.M{"name": "diana", "age": 28},
-		bson.M{"name": "eve", "age": 32},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30},
+			bson.M{"name": "bob", "age": 25},
+			bson.M{"name": "charlie", "age": 35},
+			bson.M{"name": "diana", "age": 28},
+			bson.M{"name": "eve", "age": 32},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test with limit option
+		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({}, { limit: 3 })`)
+		require.NoError(t, err)
+		require.Equal(t, "3", result.Rows[0])
+
+		// Test with skip option
+		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({}, { skip: 2 })`)
+		require.NoError(t, err)
+		require.Equal(t, "3", result.Rows[0])
+
+		// Test with both limit and skip
+		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({}, { skip: 1, limit: 2 })`)
+		require.NoError(t, err)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test with limit option
-	result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({}, { limit: 3 })`)
-	require.NoError(t, err)
-	require.Equal(t, "3", result.Rows[0])
-
-	// Test with skip option
-	result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({}, { skip: 2 })`)
-	require.NoError(t, err)
-	require.Equal(t, "3", result.Rows[0])
-
-	// Test with both limit and skip
-	result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({}, { skip: 1, limit: 2 })`)
-	require.NoError(t, err)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestCountDocumentsWithHint(t *testing.T) {
-	dbName := "testdb_count_hint"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_hint_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents and an index
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "status": "active"},
-		bson.M{"name": "bob", "status": "inactive"},
-		bson.M{"name": "charlie", "status": "active"},
+		// Create a collection with documents and an index
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "status": "active"},
+			bson.M{"name": "bob", "status": "inactive"},
+			bson.M{"name": "charlie", "status": "active"},
+		})
+		require.NoError(t, err)
+
+		// Create an index on status
+		_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "status", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test with hint using index name
+		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" }, { hint: "status_1" })`)
+		require.NoError(t, err)
+		require.Equal(t, "2", result.Rows[0])
+
+		// Test with hint using index specification document
+		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" }, { hint: { status: 1 } })`)
+		require.NoError(t, err)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	// Create an index on status
-	_, err = collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "status", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test with hint using index name
-	result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" }, { hint: "status_1" })`)
-	require.NoError(t, err)
-	require.Equal(t, "2", result.Rows[0])
-
-	// Test with hint using index specification document
-	result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" }, { hint: { status: 1 } })`)
-	require.NoError(t, err)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestCountDocumentsMaxTimeMS(t *testing.T) {
-	dbName := "testdb_count_maxtime"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_maxtime_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice"},
-		bson.M{"name": "Bob"},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice"},
+			bson.M{"name": "Bob"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({}, { maxTimeMS: 5000 })`)
+		require.NoError(t, err)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({}, { maxTimeMS: 5000 })`)
-	require.NoError(t, err)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestEstimatedDocumentCount(t *testing.T) {
-	dbName := "testdb_est_count"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_est_count_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice"},
-		bson.M{"name": "bob"},
-		bson.M{"name": "charlie"},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice"},
+			bson.M{"name": "bob"},
+			bson.M{"name": "charlie"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test estimatedDocumentCount
+		result, err := gc.Execute(ctx, dbName, "db.users.estimatedDocumentCount()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, "3", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test estimatedDocumentCount
-	result, err := gc.Execute(ctx, dbName, "db.users.estimatedDocumentCount()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
-	require.Equal(t, "3", result.Rows[0])
 }
 
 func TestEstimatedDocumentCountEmptyCollection(t *testing.T) {
-	dbName := "testdb_est_count_empty"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_est_count_empty_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Test estimatedDocumentCount on empty/non-existent collection
-	result, err := gc.Execute(ctx, dbName, "db.users.estimatedDocumentCount()")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 1, result.RowCount)
-	require.Equal(t, "0", result.Rows[0])
+		// Test estimatedDocumentCount on empty/non-existent collection
+		result, err := gc.Execute(ctx, dbName, "db.users.estimatedDocumentCount()")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, "0", result.Rows[0])
+	})
 }
 
 func TestEstimatedDocumentCountWithEmptyOptions(t *testing.T) {
-	dbName := "testdb_est_count_opts"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_est_count_opts_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"item": "a"},
-		bson.M{"item": "b"},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"item": "a"},
+			bson.M{"item": "b"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test estimatedDocumentCount with empty options {}
+		result, err := gc.Execute(ctx, dbName, "db.items.estimatedDocumentCount({})")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test estimatedDocumentCount with empty options {}
-	result, err := gc.Execute(ctx, dbName, "db.items.estimatedDocumentCount({})")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestEstimatedDocumentCountMaxTimeMS(t *testing.T) {
-	dbName := "testdb_est_count_maxtime"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_est_count_maxtime_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice"},
-		bson.M{"name": "Bob"},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice"},
+			bson.M{"name": "Bob"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		result, err := gc.Execute(ctx, dbName, `db.users.estimatedDocumentCount({ maxTimeMS: 5000 })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, "2", result.Rows[0])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	result, err := gc.Execute(ctx, dbName, `db.users.estimatedDocumentCount({ maxTimeMS: 5000 })`)
-	require.NoError(t, err)
-	require.Equal(t, 1, result.RowCount)
-	require.Equal(t, "2", result.Rows[0])
 }
 
 func TestDistinct(t *testing.T) {
-	dbName := "testdb_distinct"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_distinct_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("users")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "alice", "status": "active"},
-		bson.M{"name": "bob", "status": "inactive"},
-		bson.M{"name": "charlie", "status": "active"},
-		bson.M{"name": "diana", "status": "active"},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "alice", "status": "active"},
+			bson.M{"name": "bob", "status": "inactive"},
+			bson.M{"name": "charlie", "status": "active"},
+			bson.M{"name": "diana", "status": "active"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test distinct on status field
+		result, err := gc.Execute(ctx, dbName, `db.users.distinct("status")`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 2, result.RowCount)
+
+		// Verify both values are present
+		values := make(map[string]bool)
+		for _, row := range result.Rows {
+			values[row] = true
+		}
+		require.True(t, values[`"active"`] || values[`"inactive"`])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test distinct on status field
-	result, err := gc.Execute(ctx, dbName, `db.users.distinct("status")`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 2, result.RowCount)
-
-	// Verify both values are present
-	values := make(map[string]bool)
-	for _, row := range result.Rows {
-		values[row] = true
-	}
-	require.True(t, values[`"active"`] || values[`"inactive"`])
 }
 
 func TestDistinctWithFilter(t *testing.T) {
-	dbName := "testdb_distinct_filter"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_distinct_filter_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with documents
-	collection := client.Database(dbName).Collection("products")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"category": "electronics", "brand": "Apple", "price": 999},
-		bson.M{"category": "electronics", "brand": "Samsung", "price": 799},
-		bson.M{"category": "electronics", "brand": "Apple", "price": 1299},
-		bson.M{"category": "clothing", "brand": "Nike", "price": 99},
-		bson.M{"category": "clothing", "brand": "Adidas", "price": 89},
+		// Create a collection with documents
+		collection := db.Client.Database(dbName).Collection("products")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"category": "electronics", "brand": "Apple", "price": 999},
+			bson.M{"category": "electronics", "brand": "Samsung", "price": 799},
+			bson.M{"category": "electronics", "brand": "Apple", "price": 1299},
+			bson.M{"category": "clothing", "brand": "Nike", "price": 99},
+			bson.M{"category": "clothing", "brand": "Adidas", "price": 89},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test distinct with filter
+		result, err := gc.Execute(ctx, dbName, `db.products.distinct("brand", { category: "electronics" })`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 2, result.RowCount)
+
+		// Verify only electronics brands are returned
+		values := make(map[string]bool)
+		for _, row := range result.Rows {
+			values[row] = true
+		}
+		require.True(t, values[`"Apple"`])
+		require.True(t, values[`"Samsung"`])
+		require.False(t, values[`"Nike"`])
+		require.False(t, values[`"Adidas"`])
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test distinct with filter
-	result, err := gc.Execute(ctx, dbName, `db.products.distinct("brand", { category: "electronics" })`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 2, result.RowCount)
-
-	// Verify only electronics brands are returned
-	values := make(map[string]bool)
-	for _, row := range result.Rows {
-		values[row] = true
-	}
-	require.True(t, values[`"Apple"`])
-	require.True(t, values[`"Samsung"`])
-	require.False(t, values[`"Nike"`])
-	require.False(t, values[`"Adidas"`])
 }
 
 func TestDistinctEmptyCollection(t *testing.T) {
-	dbName := "testdb_distinct_empty"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_distinct_empty_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Test distinct on empty/non-existent collection
-	result, err := gc.Execute(ctx, dbName, `db.users.distinct("status")`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 0, result.RowCount)
-	require.Empty(t, result.Rows)
+		// Test distinct on empty/non-existent collection
+		result, err := gc.Execute(ctx, dbName, `db.users.distinct("status")`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 0, result.RowCount)
+		require.Empty(t, result.Rows)
+	})
 }
 
 func TestDistinctBracketNotation(t *testing.T) {
-	dbName := "testdb_distinct_bracket"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_distinct_bracket_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with hyphenated name
-	collection := client.Database(dbName).Collection("user-logs")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"level": "info"},
-		bson.M{"level": "warn"},
-		bson.M{"level": "error"},
-		bson.M{"level": "info"},
+		// Create a collection with hyphenated name
+		collection := db.Client.Database(dbName).Collection("user-logs")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"level": "info"},
+			bson.M{"level": "warn"},
+			bson.M{"level": "error"},
+			bson.M{"level": "info"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test with bracket notation
+		result, err := gc.Execute(ctx, dbName, `db["user-logs"].distinct("level")`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 3, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test with bracket notation
-	result, err := gc.Execute(ctx, dbName, `db["user-logs"].distinct("level")`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 3, result.RowCount)
 }
 
 func TestDistinctNumericValues(t *testing.T) {
-	dbName := "testdb_distinct_numeric"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_distinct_numeric_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Create a collection with numeric values
-	collection := client.Database(dbName).Collection("scores")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"score": 100},
-		bson.M{"score": 85},
-		bson.M{"score": 100},
-		bson.M{"score": 90},
-		bson.M{"score": 85},
+		// Create a collection with numeric values
+		collection := db.Client.Database(dbName).Collection("scores")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"score": 100},
+			bson.M{"score": 85},
+			bson.M{"score": 100},
+			bson.M{"score": 90},
+			bson.M{"score": 85},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Test distinct on numeric field
+		result, err := gc.Execute(ctx, dbName, `db.scores.distinct("score")`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 3, result.RowCount) // 100, 85, 90
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Test distinct on numeric field
-	result, err := gc.Execute(ctx, dbName, `db.scores.distinct("score")`)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, 3, result.RowCount) // 100, 85, 90
 }
 
 func TestDistinctMaxTimeMS(t *testing.T) {
-	dbName := "testdb_distinct_maxtime"
-	client := testutil.GetClient(t)
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_distinct_maxtime_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "city": "NYC"},
-		bson.M{"name": "Bob", "city": "LA"},
-		bson.M{"name": "Charlie", "city": "NYC"},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "city": "NYC"},
+			bson.M{"name": "Bob", "city": "LA"},
+			bson.M{"name": "Charlie", "city": "NYC"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		result, err := gc.Execute(ctx, dbName, `db.users.distinct("city", {}, { maxTimeMS: 5000 })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	result, err := gc.Execute(ctx, dbName, `db.users.distinct("city", {}, { maxTimeMS: 5000 })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestCursorCountUnsupported(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_cursor_count"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_cursor_count_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// cursor.count() is not in the planned registry, should return UnsupportedOperationError
-	_, err := gc.Execute(ctx, dbName, "db.users.find().count()")
-	require.Error(t, err)
+		// cursor.count() is not in the planned registry, should return UnsupportedOperationError
+		_, err := gc.Execute(ctx, dbName, "db.users.find().count()")
+		require.Error(t, err)
 
-	var unsupportedErr *gomongo.UnsupportedOperationError
-	require.ErrorAs(t, err, &unsupportedErr)
-	require.Equal(t, "count()", unsupportedErr.Operation)
+		var unsupportedErr *gomongo.UnsupportedOperationError
+		require.ErrorAs(t, err, &unsupportedErr)
+		require.Equal(t, "count()", unsupportedErr.Operation)
+	})
 }
 
 func TestCursorHintMethod(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_cursor_hint"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_cursor_hint_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+		})
+		require.NoError(t, err)
+
+		// Create index
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "name", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		// Use hint() cursor method with string
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint("name_1")`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "name", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	// Use hint() cursor method with string
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint("name_1")`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestCursorHintMethodWithDocument(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_cursor_hint_doc"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_cursor_hint_doc_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+		})
+		require.NoError(t, err)
+
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "name", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		// Use hint() cursor method with document
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ name: 1 })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "name", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	// Use hint() cursor method with document
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ name: 1 })`)
-	require.NoError(t, err)
-	require.Equal(t, 1, result.RowCount)
 }
 
 func TestCursorMaxMethod(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_cursor_max"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB doesn't support min/max cursor methods
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB doesn't support min/max cursor methods")
+		}
 
-	ctx := context.Background()
+		dbName := fmt.Sprintf("testdb_cursor_max_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	gc := gomongo.NewClient(client)
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
-		bson.M{"name": "Carol", "age": 35},
+		gc := gomongo.NewClient(db.Client)
+
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+			bson.M{"name": "Carol", "age": 35},
+		})
+		require.NoError(t, err)
+
+		// Create index on age for max() to work
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "age", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		// Use max() cursor method - returns documents with age < 30
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).max({ age: 30 })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
+		require.Contains(t, result.Rows[0], `"Bob"`)
 	})
-	require.NoError(t, err)
-
-	// Create index on age for max() to work
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "age", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	// Use max() cursor method - returns documents with age < 30
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).max({ age: 30 })`)
-	require.NoError(t, err)
-	require.Equal(t, 1, result.RowCount)
-	require.Contains(t, result.Rows[0], `"Bob"`)
 }
 
 func TestCursorMinMethod(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_cursor_min"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB doesn't support min/max cursor methods
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB doesn't support min/max cursor methods")
+		}
 
-	ctx := context.Background()
+		dbName := fmt.Sprintf("testdb_cursor_min_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	gc := gomongo.NewClient(client)
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
-		bson.M{"name": "Carol", "age": 35},
+		gc := gomongo.NewClient(db.Client)
+
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+			bson.M{"name": "Carol", "age": 35},
+		})
+		require.NoError(t, err)
+
+		// Create index on age for min() to work
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "age", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		// Use min() cursor method - returns documents with age >= 30
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).min({ age: 30 })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index on age for min() to work
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "age", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	// Use min() cursor method - returns documents with age >= 30
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).min({ age: 30 })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestCursorMinMaxCombined(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_cursor_minmax"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB doesn't support min/max cursor methods
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB doesn't support min/max cursor methods")
+		}
 
-	ctx := context.Background()
+		dbName := fmt.Sprintf("testdb_cursor_minmax_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	gc := gomongo.NewClient(client)
+		ctx := context.Background()
 
-	coll := client.Database(dbName).Collection("users")
-	_, err := coll.InsertMany(ctx, []any{
-		bson.M{"name": "Alice", "age": 30},
-		bson.M{"name": "Bob", "age": 25},
-		bson.M{"name": "Carol", "age": 35},
-		bson.M{"name": "Dave", "age": 40},
+		gc := gomongo.NewClient(db.Client)
+
+		coll := db.Client.Database(dbName).Collection("users")
+		_, err := coll.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "age": 30},
+			bson.M{"name": "Bob", "age": 25},
+			bson.M{"name": "Carol", "age": 35},
+			bson.M{"name": "Dave", "age": 40},
+		})
+		require.NoError(t, err)
+
+		// Create index on age
+		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+			Keys: bson.D{{Key: "age", Value: 1}},
+		})
+		require.NoError(t, err)
+
+		// Use min() and max() together - returns documents with 30 <= age < 40
+		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).min({ age: 30 }).max({ age: 40 })`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	// Create index on age
-	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "age", Value: 1}},
-	})
-	require.NoError(t, err)
-
-	// Use min() and max() together - returns documents with 30 <= age < 40
-	result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).min({ age: 30 }).max({ age: 40 })`)
-	require.NoError(t, err)
-	require.Equal(t, 2, result.RowCount)
 }
 
 func TestWithMaxRowsCapsResults(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_maxrows_cap"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_maxrows_cap_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Insert 20 documents
-	collection := client.Database(dbName).Collection("items")
-	docs := make([]any, 20)
-	for i := 0; i < 20; i++ {
-		docs[i] = bson.M{"index": i}
-	}
-	_, err := collection.InsertMany(ctx, docs)
-	require.NoError(t, err)
+		// Insert 20 documents
+		collection := db.Client.Database(dbName).Collection("items")
+		docs := make([]any, 20)
+		for i := range 20 {
+			docs[i] = bson.M{"index": i}
+		}
+		_, err := collection.InsertMany(ctx, docs)
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Without MaxRows - returns all 20
-	result, err := gc.Execute(ctx, dbName, "db.items.find()")
-	require.NoError(t, err)
-	require.Equal(t, 20, result.RowCount)
+		// Without MaxRows - returns all 20
+		result, err := gc.Execute(ctx, dbName, "db.items.find()")
+		require.NoError(t, err)
+		require.Equal(t, 20, result.RowCount)
 
-	// With MaxRows(10) - caps at 10
-	result, err = gc.Execute(ctx, dbName, "db.items.find()", gomongo.WithMaxRows(10))
-	require.NoError(t, err)
-	require.Equal(t, 10, result.RowCount)
+		// With MaxRows(10) - caps at 10
+		result, err = gc.Execute(ctx, dbName, "db.items.find()", gomongo.WithMaxRows(10))
+		require.NoError(t, err)
+		require.Equal(t, 10, result.RowCount)
+	})
 }
 
 func TestWithMaxRowsQueryLimitTakesPrecedence(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_maxrows_query_limit"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_maxrows_query_limit_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Insert 20 documents
-	collection := client.Database(dbName).Collection("items")
-	docs := make([]any, 20)
-	for i := 0; i < 20; i++ {
-		docs[i] = bson.M{"index": i}
-	}
-	_, err := collection.InsertMany(ctx, docs)
-	require.NoError(t, err)
+		// Insert 20 documents
+		collection := db.Client.Database(dbName).Collection("items")
+		docs := make([]any, 20)
+		for i := range 20 {
+			docs[i] = bson.M{"index": i}
+		}
+		_, err := collection.InsertMany(ctx, docs)
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Query limit(5) is smaller than MaxRows(100) - should return 5
-	result, err := gc.Execute(ctx, dbName, "db.items.find().limit(5)", gomongo.WithMaxRows(100))
-	require.NoError(t, err)
-	require.Equal(t, 5, result.RowCount)
+		// Query limit(5) is smaller than MaxRows(100) - should return 5
+		result, err := gc.Execute(ctx, dbName, "db.items.find().limit(5)", gomongo.WithMaxRows(100))
+		require.NoError(t, err)
+		require.Equal(t, 5, result.RowCount)
+	})
 }
 
 func TestWithMaxRowsTakesPrecedenceOverLargerLimit(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_maxrows_precedence"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_maxrows_precedence_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Insert 20 documents
-	collection := client.Database(dbName).Collection("items")
-	docs := make([]any, 20)
-	for i := 0; i < 20; i++ {
-		docs[i] = bson.M{"index": i}
-	}
-	_, err := collection.InsertMany(ctx, docs)
-	require.NoError(t, err)
+		// Insert 20 documents
+		collection := db.Client.Database(dbName).Collection("items")
+		docs := make([]any, 20)
+		for i := range 20 {
+			docs[i] = bson.M{"index": i}
+		}
+		_, err := collection.InsertMany(ctx, docs)
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Query limit(100) is larger than MaxRows(5) - should return 5
-	result, err := gc.Execute(ctx, dbName, "db.items.find().limit(100)", gomongo.WithMaxRows(5))
-	require.NoError(t, err)
-	require.Equal(t, 5, result.RowCount)
+		// Query limit(100) is larger than MaxRows(5) - should return 5
+		result, err := gc.Execute(ctx, dbName, "db.items.find().limit(100)", gomongo.WithMaxRows(5))
+		require.NoError(t, err)
+		require.Equal(t, 5, result.RowCount)
+	})
 }
 
 func TestExecuteBackwardCompatibility(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_backward_compat"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_backward_compat_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	collection := client.Database(dbName).Collection("items")
-	_, err := collection.InsertMany(ctx, []any{
-		bson.M{"name": "a"},
-		bson.M{"name": "b"},
-		bson.M{"name": "c"},
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "a"},
+			bson.M{"name": "b"},
+			bson.M{"name": "c"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Execute without options should work (backward compatible)
+		result, err := gc.Execute(ctx, dbName, "db.items.find()")
+		require.NoError(t, err)
+		require.Equal(t, 3, result.RowCount)
 	})
-	require.NoError(t, err)
-
-	gc := gomongo.NewClient(client)
-
-	// Execute without options should work (backward compatible)
-	result, err := gc.Execute(ctx, dbName, "db.items.find()")
-	require.NoError(t, err)
-	require.Equal(t, 3, result.RowCount)
 }
 
 func TestCountDocumentsWithMaxRows(t *testing.T) {
-	client := testutil.GetClient(t)
-	dbName := "testdb_count_maxrows"
-	defer testutil.CleanupDatabase(t, client, dbName)
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_count_maxrows_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	// Insert 100 documents
-	collection := client.Database(dbName).Collection("items")
-	docs := make([]any, 100)
-	for i := 0; i < 100; i++ {
-		docs[i] = bson.M{"index": i}
-	}
-	_, err := collection.InsertMany(ctx, docs)
-	require.NoError(t, err)
+		// Insert 100 documents
+		collection := db.Client.Database(dbName).Collection("items")
+		docs := make([]any, 100)
+		for i := range 100 {
+			docs[i] = bson.M{"index": i}
+		}
+		_, err := collection.InsertMany(ctx, docs)
+		require.NoError(t, err)
 
-	gc := gomongo.NewClient(client)
+		gc := gomongo.NewClient(db.Client)
 
-	// Without MaxRows - counts all 100
-	result, err := gc.Execute(ctx, dbName, "db.items.countDocuments()")
-	require.NoError(t, err)
-	require.Equal(t, "100", result.Rows[0])
+		// Without MaxRows - counts all 100
+		result, err := gc.Execute(ctx, dbName, "db.items.countDocuments()")
+		require.NoError(t, err)
+		require.Equal(t, "100", result.Rows[0])
 
-	// With MaxRows(50) - counts up to 50
-	result, err = gc.Execute(ctx, dbName, "db.items.countDocuments()", gomongo.WithMaxRows(50))
-	require.NoError(t, err)
-	require.Equal(t, "50", result.Rows[0])
+		// With MaxRows(50) - counts up to 50
+		result, err = gc.Execute(ctx, dbName, "db.items.countDocuments()", gomongo.WithMaxRows(50))
+		require.NoError(t, err)
+		require.Equal(t, "50", result.Rows[0])
+	})
+}
+
+func TestFindWithNestedAndOr(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_nested_andor_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"a": 1, "b": 2, "c": 3},
+			bson.M{"a": 1, "b": 9, "c": 3},
+			bson.M{"a": 9, "b": 2, "c": 3},
+			bson.M{"a": 9, "b": 9, "c": 9},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		// {$and: [{$or: [{a: 1}, {b: 2}]}, {c: 3}]}
+		result, err := gc.Execute(ctx, dbName, `db.items.find({$and: [{$or: [{a: 1}, {b: 2}]}, {c: 3}]})`)
+		require.NoError(t, err)
+		require.Equal(t, 3, result.RowCount)
+	})
+}
+
+func TestFindWithMultipleOperatorsSameField(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_multi_op_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"age": 15},
+			bson.M{"age": 25},
+			bson.M{"age": 30},
+			bson.M{"age": 35},
+			bson.M{"age": 55},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		// {age: {$gt: 20, $lt: 50, $ne: 30}}
+		result, err := gc.Execute(ctx, dbName, `db.items.find({age: {$gt: 20, $lt: 50, $ne: 30}})`)
+		require.NoError(t, err)
+		require.Equal(t, 2, result.RowCount) // 25 and 35
+	})
+}
+
+func TestFindWithElemMatch(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_elemmatch_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("students")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "Alice", "scores": []bson.M{{"subject": "math", "score": 95}, {"subject": "english", "score": 80}}},
+			bson.M{"name": "Bob", "scores": []bson.M{{"subject": "math", "score": 70}, {"subject": "english", "score": 75}}},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		result, err := gc.Execute(ctx, dbName, `db.students.find({scores: {$elemMatch: {score: {$gt: 90}}}})`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount)
+		require.Contains(t, result.Rows[0], "Alice")
+	})
+}
+
+func TestFindAllCursorModifiers(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_all_modifiers_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("items")
+		docs := make([]any, 20)
+		for i := range 20 {
+			docs[i] = bson.M{"idx": i, "name": fmt.Sprintf("item%02d", i)}
+		}
+		_, err := collection.InsertMany(ctx, docs)
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		// sort descending, skip 5, limit 3, project only idx
+		result, err := gc.Execute(ctx, dbName, `db.items.find().sort({idx: -1}).skip(5).limit(3).projection({idx: 1, _id: 0})`)
+		require.NoError(t, err)
+		require.Equal(t, 3, result.RowCount)
+		// Should get idx 14, 13, 12 (sorted desc, skip top 5: 19,18,17,16,15)
+		require.Contains(t, result.Rows[0], "14")
+		require.Contains(t, result.Rows[1], "13")
+		require.Contains(t, result.Rows[2], "12")
+	})
+}
+
+func TestAggregateWithJSFunction(t *testing.T) {
+	// Skip: The ANTLR-based MongoDB parser does not support JavaScript function literals.
+	// The parser fails with "no viable alternative at input '...body: function'" when
+	// encountering inline JavaScript functions in $function operators.
+	// This is a parser limitation, not a gomongo limitation.
+	t.Skip("Parser does not support JavaScript function literals in $function operator")
+
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB may not support $function
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB does not support $function")
+		}
+
+		dbName := fmt.Sprintf("testdb_js_func_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("numbers")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"value": 2},
+			bson.M{"value": 3},
+			bson.M{"value": 4},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		result, err := gc.Execute(ctx, dbName, `db.numbers.aggregate([
+			{$addFields: {
+				isEven: {
+					$function: {
+						body: function(x) { return x % 2 === 0; },
+						args: ["$value"],
+						lang: "js"
+					}
+				}
+			}}
+		])`)
+		require.NoError(t, err)
+		require.Equal(t, 3, result.RowCount)
+	})
+}
+
+func TestFindWithWhere(t *testing.T) {
+	// Skip: The ANTLR-based MongoDB parser does not support JavaScript function literals.
+	// The parser fails with "no viable alternative at input 'find({$where: function'" when
+	// encountering inline JavaScript functions in $where clauses.
+	// This is a parser limitation, not a gomongo limitation.
+	t.Skip("Parser does not support JavaScript function literals in $where clause")
+
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		// DocumentDB may not support $where
+		if db.Name == "documentdb" {
+			t.Skip("DocumentDB does not support $where")
+		}
+
+		dbName := fmt.Sprintf("testdb_where_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("items")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"a": 5, "b": 10},
+			bson.M{"a": 10, "b": 5},
+			bson.M{"a": 3, "b": 3},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+		result, err := gc.Execute(ctx, dbName, `db.items.find({$where: function() { return this.a > this.b; }})`)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.RowCount) // Only {a: 10, b: 5}
+	})
 }
