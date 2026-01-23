@@ -1,0 +1,67 @@
+[
+  {
+    "_id": "deeply_nested",
+    "level1": {
+      "level2": {
+        "level3": {
+          "level4": {
+            "level5": {"value": "deep"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "_id": "array_variations",
+    "empty_array": [],
+    "single_item": ["only"],
+    "numbers": [1, 2, 3, 4, 5],
+    "mixed_types": [1, "two", true, null, {"nested": "obj"}],
+    "nested_arrays": [[1, 2], [3, 4], [[5, 6], [7, 8]]]
+  },
+  {
+    "_id": "numeric_edge_cases",
+    "zero": 0,
+    "negative": -42,
+    "float": 3.14159265358979,
+    "large_int": 9007199254740991,
+    "small_float": 0.0000001,
+    "scientific": 1.23e10
+  },
+  {
+    "_id": "boolean_null",
+    "true_val": true,
+    "false_val": false,
+    "null_val": null,
+    "missing_field_test": "other fields exist"
+  },
+  {
+    "_id": "field_name_edge",
+    "normal": "ok",
+    "with-dash": "dashed field",
+    "with_underscore": "underscored",
+    "with space": "spaced field",
+    "123numeric": "numeric start"
+  },
+  {
+    "_id": "orders_sample",
+    "customer": {"name": "Alice", "tier": "gold"},
+    "items": [
+      {"product": "Widget", "qty": 2, "price": 25.00},
+      {"product": "Gadget", "qty": 1, "price": 99.99}
+    ],
+    "shipping": {"address": {"city": "Tokyo", "zip": "100-0001"}, "method": "express"},
+    "status": "shipped",
+    "total": 149.99
+  },
+  {
+    "_id": "empty_nested",
+    "empty_obj": {},
+    "obj_with_empty": {"a": {}, "b": {"c": {}}},
+    "array_of_empty": [{}, {}, {}]
+  },
+  {
+    "_id": "large_array",
+    "items": ["item0", "item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8", "item9", "item10", "item11", "item12", "item13", "item14", "item15", "item16", "item17", "item18", "item19"]
+  }
+]

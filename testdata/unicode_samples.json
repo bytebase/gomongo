@@ -1,0 +1,18 @@
+[
+  {"_id": "zh_simplified", "name": "张三", "city": "北京", "bio": "软件工程师，喜欢编程", "lang": "zh-CN"},
+  {"_id": "zh_traditional", "name": "李四", "city": "台北", "bio": "資深開發者", "lang": "zh-TW"},
+  {"_id": "ja", "name": "田中太郎", "city": "東京", "bio": "プログラマーです。趣味は読書。", "lang": "ja"},
+  {"_id": "ko", "name": "김철수", "city": "서울", "bio": "백엔드 개발자입니다", "lang": "ko"},
+  {"_id": "ar", "name": "محمد أحمد", "city": "القاهرة", "bio": "مهندس برمجيات متخصص في قواعد البيانات", "lang": "ar"},
+  {"_id": "he", "name": "דוד כהן", "city": "תל אביב", "bio": "מפתח תוכנה בכיר", "lang": "he"},
+  {"_id": "th", "name": "สมชาย", "city": "กรุงเทพ", "bio": "นักพัฒนาซอฟต์แวร์", "lang": "th"},
+  {"_id": "ru", "name": "Иван Петров", "city": "Москва", "bio": "Программист баз данных", "lang": "ru"},
+  {"_id": "emoji", "name": "Test User 🎉", "city": "Fun City 🌈", "bio": "Love coding 💻 and coffee ☕!", "tags": ["🔥", "✨", "🚀", "❤️"], "lang": "en"},
+  {"_id": "mixed_cjk", "name": "Alice 张三 田中", "city": "Tokyo/東京/东京", "bio": "Bilingual: 日本語と中文", "lang": "mixed"},
+  {"_id": "mixed_rtl", "name": "David דוד محمد", "city": "Global", "bio": "English עברית العربية together", "lang": "mixed"},
+  {"_id": "special_chars", "name": "O'Brien-Smith", "city": "San José", "bio": "Café owner & \"entrepreneur\"", "lang": "en"},
+  {"_id": "math_symbols", "name": "Dr. π", "city": "∞ City", "bio": "∑(1/n²) = π²/6, √2 ≈ 1.414", "lang": "math"},
+  {"_id": "currency", "name": "Trader", "city": "Finance Hub", "bio": "Deals in $, €, £, ¥, ₹, ₿", "lang": "en"},
+  {"_id": "newlines", "name": "Multi\nLine", "city": "Test", "bio": "Line1\nLine2\tTabbed\rCarriage", "lang": "en"},
+  {"_id": "zero_width", "name": "Zero​Width​", "city": "Invisible", "bio": "Has zero-width spaces", "lang": "en"}
+]
