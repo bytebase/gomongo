@@ -18,9 +18,28 @@ func executeCreateIndex(ctx context.Context, client *mongo.Client, database stri
 		Keys: op.IndexKeys,
 	}
 
-	// Build index options from the stored options
+	// Build index options
+	opts := options.Index()
+	hasOptions := false
+
 	if op.IndexName != "" {
-		opts := options.Index().SetName(op.IndexName)
+		opts.SetName(op.IndexName)
+		hasOptions = true
+	}
+	if op.IndexUnique != nil && *op.IndexUnique {
+		opts.SetUnique(true)
+		hasOptions = true
+	}
+	if op.IndexSparse != nil && *op.IndexSparse {
+		opts.SetSparse(true)
+		hasOptions = true
+	}
+	if op.IndexTTL != nil {
+		opts.SetExpireAfterSeconds(*op.IndexTTL)
+		hasOptions = true
+	}
+
+	if hasOptions {
 		indexModel.Options = opts
 	}
 
@@ -153,7 +172,14 @@ func executeDropIndexes(ctx context.Context, client *mongo.Client, database stri
 	collection := client.Database(database).Collection(op.Collection)
 
 	var err error
-	if op.IndexName == "*" || op.IndexName == "" {
+	if len(op.IndexNames) > 0 {
+		// Drop each index in the array
+		for _, name := range op.IndexNames {
+			if dropErr := collection.Indexes().DropOne(ctx, name); dropErr != nil {
+				return nil, fmt.Errorf("dropIndexes failed for index %q: %w", name, dropErr)
+			}
+		}
+	} else if op.IndexName == "*" || op.IndexName == "" {
 		// Drop all indexes (except _id)
 		err = collection.Indexes().DropAll(ctx)
 	} else {
@@ -196,7 +222,28 @@ func executeDrop(ctx context.Context, client *mongo.Client, database string, op 
 func executeCreateCollection(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
 	db := client.Database(database)
 
-	err := db.CreateCollection(ctx, op.Collection)
+	// Build create collection options
+	opts := options.CreateCollection()
+	if op.Capped != nil && *op.Capped {
+		opts.SetCapped(true)
+	}
+	if op.CollectionSize != nil {
+		opts.SetSizeInBytes(*op.CollectionSize)
+	}
+	if op.CollectionMax != nil {
+		opts.SetMaxDocuments(*op.CollectionMax)
+	}
+	if op.Validator != nil {
+		opts.SetValidator(op.Validator)
+	}
+	if op.ValidationLevel != "" {
+		opts.SetValidationLevel(op.ValidationLevel)
+	}
+	if op.ValidationAction != "" {
+		opts.SetValidationAction(op.ValidationAction)
+	}
+
+	err := db.CreateCollection(ctx, op.Collection, opts)
 	if err != nil {
 		return nil, fmt.Errorf("createCollection failed: %w", err)
 	}

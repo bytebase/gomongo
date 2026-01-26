@@ -137,10 +137,10 @@ func TestUnicodeRoundTrip(t *testing.T) {
 		for _, row := range result.Rows {
 			allRows += row
 		}
-		require.Contains(t, allRows, "张三")    // Chinese
+		require.Contains(t, allRows, "张三")   // Chinese
 		require.Contains(t, allRows, "田中太郎") // Japanese
 		require.Contains(t, allRows, "김철수")  // Korean
-		require.Contains(t, allRows, "محمد")  // Arabic
+		require.Contains(t, allRows, "محمد") // Arabic
 		require.Contains(t, allRows, "🎉")    // Emoji
 	})
 }

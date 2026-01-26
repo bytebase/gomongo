@@ -71,17 +71,29 @@ type Operation struct {
 	ReturnDocument *string  // "before" or "after" for findOneAnd* operations
 
 	// M2: Additional write operation options
-	Ordered                  *bool   // insertMany ordered option
-	Collation                bson.D  // collation settings for string comparison
-	ArrayFilters             bson.A  // array element filters for update operations
-	Let                      bson.D  // variables for aggregation expressions
-	BypassDocumentValidation *bool   // bypass schema validation
-	Comment                  any     // comment for server logs/profiling
-	WriteConcern             bson.D  // write concern settings (w, j, wtimeout)
+	Ordered                  *bool  // insertMany ordered option
+	Collation                bson.D // collation settings for string comparison
+	ArrayFilters             bson.A // array element filters for update operations
+	Let                      bson.D // variables for aggregation expressions
+	BypassDocumentValidation *bool  // bypass schema validation
+	Comment                  any    // comment for server logs/profiling
+	WriteConcern             bson.D // write concern settings (w, j, wtimeout)
 
 	// M3: Administrative operation fields
-	IndexKeys  bson.D // createIndex key specification
-	IndexName  string // dropIndex index name (or createIndex name option)
-	NewName    string // renameCollection new collection name
-	DropTarget *bool  // renameCollection dropTarget option
+	IndexKeys   bson.D   // createIndex key specification
+	IndexName   string   // dropIndex index name (or createIndex name option)
+	IndexNames  []string // dropIndexes array of index names
+	NewName     string   // renameCollection new collection name
+	DropTarget  *bool    // renameCollection dropTarget option
+	IndexUnique *bool    // createIndex unique option
+	IndexSparse *bool    // createIndex sparse option
+	IndexTTL    *int32   // createIndex expireAfterSeconds option
+
+	// createCollection options
+	Capped           *bool  // createCollection capped option
+	CollectionSize   *int64 // createCollection size option (for capped)
+	CollectionMax    *int64 // createCollection max option (for capped)
+	ValidationLevel  string // createCollection validationLevel option
+	ValidationAction string // createCollection validationAction option
+	Validator        bson.D // createCollection validator option
 }

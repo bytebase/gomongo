@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/bytebase/gomongo"
@@ -258,5 +259,165 @@ func TestRenameCollectionWithDropTarget(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, findResult.RowCount)
 		require.Contains(t, findResult.Rows[0], `"x": 1`)
+	})
+}
+
+func TestCreateCollectionWithOptions(t *testing.T) {
+	// Capped collections are not supported on DocumentDB
+	testutil.RunOnMongoDBOnly(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_coll_opts_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		gc := gomongo.NewClient(db.Client)
+
+		// Create a capped collection
+		result, err := gc.Execute(ctx, dbName, `db.createCollection("cappedcoll", { capped: true, size: 1048576 })`)
+		require.NoError(t, err)
+		require.Contains(t, result.Rows[0], `"ok": 1`)
+
+		// Verify collection exists
+		collResult, err := gc.Execute(ctx, dbName, `show collections`)
+		require.NoError(t, err)
+		require.Equal(t, 1, collResult.RowCount)
+		require.Equal(t, "cappedcoll", collResult.Rows[0])
+	})
+}
+
+func TestCreateCollectionWithMaxDocuments(t *testing.T) {
+	// Capped collections are not supported on DocumentDB
+	testutil.RunOnMongoDBOnly(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_coll_max_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		gc := gomongo.NewClient(db.Client)
+
+		// Create a capped collection with max documents
+		result, err := gc.Execute(ctx, dbName, `db.createCollection("cappedmax", { capped: true, size: 1048576, max: 100 })`)
+		require.NoError(t, err)
+		require.Contains(t, result.Rows[0], `"ok": 1`)
+	})
+}
+
+func TestDropIndexesWithArray(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_drop_idxs_arr_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		// Create a collection with indexes
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertOne(ctx, bson.M{"name": "alice", "email": "alice@example.com", "age": 30})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Create indexes with explicit names
+		_, err = gc.Execute(ctx, dbName, `db.users.createIndex({ name: 1 }, { name: "name_idx" })`)
+		require.NoError(t, err)
+		_, err = gc.Execute(ctx, dbName, `db.users.createIndex({ email: 1 }, { name: "email_idx" })`)
+		require.NoError(t, err)
+		_, err = gc.Execute(ctx, dbName, `db.users.createIndex({ age: 1 }, { name: "age_idx" })`)
+		require.NoError(t, err)
+
+		// Drop two indexes using an array
+		result, err := gc.Execute(ctx, dbName, `db.users.dropIndexes(["name_idx", "email_idx"])`)
+		require.NoError(t, err)
+		require.Contains(t, result.Rows[0], `"ok": 1`)
+
+		// Verify only _id and age_idx remain
+		idxResult, err := gc.Execute(ctx, dbName, `db.users.getIndexes()`)
+		require.NoError(t, err)
+		require.Equal(t, 2, idxResult.RowCount) // _id + age_idx
+	})
+}
+
+func TestCreateIndexWithUniqueOption(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_idx_unique_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		_, err := db.Client.Database(dbName).Collection("users").InsertOne(ctx, bson.M{"email": "alice@example.com"})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Create a unique index
+		result, err := gc.Execute(ctx, dbName, `db.users.createIndex({ email: 1 }, { unique: true, name: "email_unique" })`)
+		require.NoError(t, err)
+		require.Equal(t, "email_unique", result.Rows[0])
+
+		// Try to insert a duplicate - should fail
+		_, err = gc.Execute(ctx, dbName, `db.users.insertOne({ email: "alice@example.com" })`)
+		require.Error(t, err)
+		// Different databases may use different error messages
+		errStr := err.Error()
+		require.True(t, strings.Contains(errStr, "duplicate key") || strings.Contains(errStr, "Duplicate key"),
+			"expected duplicate key error, got: %s", errStr)
+	})
+}
+
+func TestCreateIndexWithSparseOption(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_idx_sparse_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		_, err := db.Client.Database(dbName).Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Create a sparse index
+		result, err := gc.Execute(ctx, dbName, `db.users.createIndex({ email: 1 }, { sparse: true, name: "email_sparse" })`)
+		require.NoError(t, err)
+		require.Equal(t, "email_sparse", result.Rows[0])
+
+		// Documents without the indexed field should still be insertable
+		_, err = gc.Execute(ctx, dbName, `db.users.insertOne({ name: "bob" })`)
+		require.NoError(t, err)
+	})
+}
+
+func TestCreateIndexWithTTLOption(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_idx_ttl_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		_, err := db.Client.Database(dbName).Collection("sessions").InsertOne(ctx, bson.M{"createdAt": bson.M{"$date": "2024-01-01T00:00:00Z"}})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Create a TTL index
+		result, err := gc.Execute(ctx, dbName, `db.sessions.createIndex({ createdAt: 1 }, { expireAfterSeconds: 3600, name: "session_ttl" })`)
+		require.NoError(t, err)
+		require.Equal(t, "session_ttl", result.Rows[0])
+	})
+}
+
+func TestCreateIndexWithBackgroundOption(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_idx_bg_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		_, err := db.Client.Database(dbName).Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// Create an index with background option (deprecated but should be accepted)
+		result, err := gc.Execute(ctx, dbName, `db.users.createIndex({ name: 1 }, { background: true })`)
+		require.NoError(t, err)
+		require.Contains(t, result.Rows[0], "name")
 	})
 }

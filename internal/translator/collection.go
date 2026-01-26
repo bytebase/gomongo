@@ -1902,7 +1902,6 @@ func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) 
 			return
 		}
 
-		// Only "name" option is currently supported
 		for _, opt := range options {
 			switch opt.Key {
 			case "name":
@@ -1912,8 +1911,36 @@ func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) 
 					v.err = fmt.Errorf("createIndex() name must be a string")
 					return
 				}
+			case "unique":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.IndexUnique = &val
+				} else {
+					v.err = fmt.Errorf("createIndex() unique must be a boolean")
+					return
+				}
+			case "sparse":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.IndexSparse = &val
+				} else {
+					v.err = fmt.Errorf("createIndex() sparse must be a boolean")
+					return
+				}
+			case "expireAfterSeconds":
+				if val, ok := toInt32(opt.Value); ok {
+					v.operation.IndexTTL = &val
+				} else {
+					v.err = fmt.Errorf("createIndex() expireAfterSeconds must be a number")
+					return
+				}
+			case "background":
+				// background option is deprecated but still accepted for compatibility
+				// The Go driver ignores it since MongoDB 4.2
+				if _, ok := opt.Value.(bool); !ok {
+					v.err = fmt.Errorf("createIndex() background must be a boolean")
+					return
+				}
+				// Silently ignore - it's deprecated and has no effect
 			default:
-				// Reject unsupported options to avoid silently ignoring them
 				v.err = &UnsupportedOptionError{
 					Method: "createIndex()",
 					Option: opt.Key,
@@ -2010,10 +2037,22 @@ func (v *visitor) extractDropIndexesArgs(ctx mongodb.IDropIndexesMethodContext) 
 		}
 		v.operation.IndexName = unquoteString(strLit.StringLiteral().GetText())
 	case *mongodb.ArrayValueContext:
-		// Array of index names is not currently supported in this translator.
-		// Silently broadening scope to drop all indexes ("*") would be unsafe.
-		v.err = fmt.Errorf("dropIndexes() with an array of index names is not supported; use a single index name or \"*\" to drop all indexes")
-		return
+		// Array of index names - iterate and extract each name
+		arr, err := convertArray(val.Array())
+		if err != nil {
+			v.err = fmt.Errorf("invalid index names array: %w", err)
+			return
+		}
+		var indexNames []string
+		for i, elem := range arr {
+			name, ok := elem.(string)
+			if !ok {
+				v.err = fmt.Errorf("dropIndexes() array element %d must be a string", i)
+				return
+			}
+			indexNames = append(indexNames, name)
+		}
+		v.operation.IndexNames = indexNames
 	default:
 		v.err = fmt.Errorf("dropIndexes() argument must be a string or array")
 	}

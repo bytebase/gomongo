@@ -181,3 +181,33 @@ func convertRegExpConstructor(ctx mongodb.IRegExpConstructorContext) (bson.Regex
 
 	return bson.Regex{Pattern: pattern, Options: options}, nil
 }
+
+// toInt64 converts various numeric types to int64.
+func toInt64(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int32:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), true
+	}
+	return 0, false
+}
+
+// toInt32 converts various numeric types to int32.
+func toInt32(v any) (int32, bool) {
+	switch n := v.(type) {
+	case int:
+		return int32(n), true
+	case int32:
+		return n, true
+	case int64:
+		return int32(n), true
+	case float64:
+		return int32(n), true
+	}
+	return 0, false
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bytebase/parser/mongodb"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func (v *visitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollectionInfosContext) {
@@ -150,10 +151,85 @@ func (v *visitor) extractCreateCollectionArgs(ctx *mongodb.CreateCollectionConte
 	v.operation.Collection = unquoteString(stringLiteral.StringLiteral().GetText())
 
 	// Second argument: options (optional)
-	// Options are currently not supported; reject calls that attempt to use them
-	// to avoid silently ignoring user-specified options.
-	if len(allArgs) > 1 {
-		v.err = fmt.Errorf("createCollection() options argument is not supported yet")
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("createCollection() options must be a document")
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "capped":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.Capped = &val
+				} else {
+					v.err = fmt.Errorf("createCollection() capped must be a boolean")
+					return
+				}
+			case "size":
+				if val, ok := toInt64(opt.Value); ok {
+					v.operation.CollectionSize = &val
+				} else {
+					v.err = fmt.Errorf("createCollection() size must be a number")
+					return
+				}
+			case "max":
+				if val, ok := toInt64(opt.Value); ok {
+					v.operation.CollectionMax = &val
+				} else {
+					v.err = fmt.Errorf("createCollection() max must be a number")
+					return
+				}
+			case "validator":
+				if doc, ok := opt.Value.(bson.D); ok {
+					v.operation.Validator = doc
+				} else {
+					v.err = fmt.Errorf("createCollection() validator must be a document")
+					return
+				}
+			case "validationLevel":
+				if val, ok := opt.Value.(string); ok {
+					v.operation.ValidationLevel = val
+				} else {
+					v.err = fmt.Errorf("createCollection() validationLevel must be a string")
+					return
+				}
+			case "validationAction":
+				if val, ok := opt.Value.(string); ok {
+					v.operation.ValidationAction = val
+				} else {
+					v.err = fmt.Errorf("createCollection() validationAction must be a string")
+					return
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "createCollection()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("createCollection() takes at most 2 arguments")
 		return
 	}
 }
