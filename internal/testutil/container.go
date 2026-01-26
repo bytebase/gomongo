@@ -224,3 +224,19 @@ func RunOnAllDBs(t *testing.T, testFn func(t *testing.T, db TestDB)) {
 		})
 	}
 }
+
+// RunOnMongoDBOnly runs a test function only on MongoDB databases (not DocumentDB).
+// Use this for tests that require MongoDB-specific features like renameCollection.
+func RunOnMongoDBOnly(t *testing.T, testFn func(t *testing.T, db TestDB)) {
+	t.Helper()
+	dbs := GetAllClients(t)
+	for _, db := range dbs {
+		// Skip DocumentDB as some operations like renameCollection may not be supported
+		if db.Name == "documentdb" {
+			continue
+		}
+		t.Run(db.Name, func(t *testing.T) {
+			testFn(t, db)
+		})
+	}
+}

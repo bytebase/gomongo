@@ -1825,3 +1825,324 @@ func (v *visitor) extractFindOneAndModifyArgs(methodName string, args mongodb.IA
 		return
 	}
 }
+
+// extractCreateIndexArgs extracts arguments from CreateIndexMethodContext.
+func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) {
+	method, ok := ctx.(*mongodb.CreateIndexMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("createIndex() requires a key specification")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("createIndex() requires a key specification")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("createIndex() requires a key specification")
+		return
+	}
+
+	// First argument: keys document (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("createIndex() key specification must be a document")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("createIndex() key specification must be a document")
+		return
+	}
+
+	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("createIndex() key specification must be a document")
+		return
+	}
+
+	keys, err := convertDocument(docValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid key specification: %w", err)
+		return
+	}
+	v.operation.IndexKeys = keys
+
+	// Second argument: options (optional)
+	// Currently only the "name" option is supported.
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		optionsValueCtx := secondArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("createIndex() options must be a document")
+			return
+		}
+
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+
+		for _, opt := range options {
+			switch opt.Key {
+			case "name":
+				if val, ok := opt.Value.(string); ok {
+					v.operation.IndexName = val
+				} else {
+					v.err = fmt.Errorf("createIndex() name must be a string")
+					return
+				}
+			case "unique":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.IndexUnique = &val
+				} else {
+					v.err = fmt.Errorf("createIndex() unique must be a boolean")
+					return
+				}
+			case "sparse":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.IndexSparse = &val
+				} else {
+					v.err = fmt.Errorf("createIndex() sparse must be a boolean")
+					return
+				}
+			case "expireAfterSeconds":
+				if val, ok := ToInt32(opt.Value); ok {
+					v.operation.IndexTTL = &val
+				} else {
+					v.err = fmt.Errorf("createIndex() expireAfterSeconds must be a number")
+					return
+				}
+			case "background":
+				// background option is deprecated but still accepted for compatibility
+				// The Go driver ignores it since MongoDB 4.2
+				if _, ok := opt.Value.(bool); !ok {
+					v.err = fmt.Errorf("createIndex() background must be a boolean")
+					return
+				}
+				// Silently ignore - it's deprecated and has no effect
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "createIndex()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("createIndex() takes at most 2 arguments")
+		return
+	}
+}
+
+// extractDropIndexArgs extracts arguments from DropIndexMethodContext.
+func (v *visitor) extractDropIndexArgs(ctx mongodb.IDropIndexMethodContext) {
+	method, ok := ctx.(*mongodb.DropIndexMethodContext)
+	if !ok {
+		return
+	}
+
+	arg := method.Argument()
+	if arg == nil {
+		v.err = fmt.Errorf("dropIndex() requires an index name or key specification")
+		return
+	}
+
+	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := argCtx.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("dropIndex() requires an index name or key specification")
+		return
+	}
+
+	// dropIndex can accept a string (index name) or document (index key spec)
+	switch val := valueCtx.(type) {
+	case *mongodb.LiteralValueContext:
+		strLit, ok := val.Literal().(*mongodb.StringLiteralValueContext)
+		if !ok {
+			v.err = fmt.Errorf("dropIndex() argument must be a string or document")
+			return
+		}
+		v.operation.IndexName = unquoteString(strLit.StringLiteral().GetText())
+	case *mongodb.DocumentValueContext:
+		doc, err := convertDocument(val.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid index specification: %w", err)
+			return
+		}
+		v.operation.IndexKeys = doc
+	default:
+		v.err = fmt.Errorf("dropIndex() argument must be a string or document")
+	}
+}
+
+// extractDropIndexesArgs extracts arguments from DropIndexesMethodContext.
+func (v *visitor) extractDropIndexesArgs(ctx mongodb.IDropIndexesMethodContext) {
+	method, ok := ctx.(*mongodb.DropIndexesMethodContext)
+	if !ok {
+		return
+	}
+
+	// dropIndexes() can be called without arguments (drops all indexes except _id)
+	// or with a single argument (index name, array of names, or "*")
+	arg := method.Argument()
+	if arg == nil {
+		// No argument means drop all indexes (represented as "*" to the driver)
+		v.operation.IndexName = "*"
+		return
+	}
+
+	argCtx, ok := arg.(*mongodb.ArgumentContext)
+	if !ok {
+		return
+	}
+
+	valueCtx := argCtx.Value()
+	if valueCtx == nil {
+		v.operation.IndexName = "*"
+		return
+	}
+
+	switch val := valueCtx.(type) {
+	case *mongodb.LiteralValueContext:
+		strLit, ok := val.Literal().(*mongodb.StringLiteralValueContext)
+		if !ok {
+			v.err = fmt.Errorf("dropIndexes() argument must be a string or array")
+			return
+		}
+		v.operation.IndexName = unquoteString(strLit.StringLiteral().GetText())
+	case *mongodb.ArrayValueContext:
+		// Array of index names - iterate and extract each name
+		arr, err := convertArray(val.Array())
+		if err != nil {
+			v.err = fmt.Errorf("invalid index names array: %w", err)
+			return
+		}
+		var indexNames []string
+		for i, elem := range arr {
+			name, ok := elem.(string)
+			if !ok {
+				v.err = fmt.Errorf("dropIndexes() array element %d must be a string", i)
+				return
+			}
+			indexNames = append(indexNames, name)
+		}
+		v.operation.IndexNames = indexNames
+	default:
+		v.err = fmt.Errorf("dropIndexes() argument must be a string or array")
+	}
+}
+
+// extractRenameCollectionArgs extracts arguments from RenameCollectionMethodContext.
+func (v *visitor) extractRenameCollectionArgs(ctx mongodb.IRenameCollectionMethodContext) {
+	method, ok := ctx.(*mongodb.RenameCollectionMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("renameCollection() requires a new collection name")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("renameCollection() requires a new collection name")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("renameCollection() requires a new collection name")
+		return
+	}
+
+	// First argument: new collection name (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("renameCollection() new name must be a string")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("renameCollection() new name must be a string")
+		return
+	}
+
+	literalValue, ok := valueCtx.(*mongodb.LiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("renameCollection() new name must be a string")
+		return
+	}
+
+	stringLiteral, ok := literalValue.Literal().(*mongodb.StringLiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("renameCollection() new name must be a string")
+		return
+	}
+
+	v.operation.NewName = unquoteString(stringLiteral.StringLiteral().GetText())
+
+	// Second argument: dropTarget boolean (optional)
+	if len(allArgs) >= 2 {
+		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+
+		dropTargetValueCtx := secondArg.Value()
+		if dropTargetValueCtx == nil {
+			return
+		}
+
+		literalVal, ok := dropTargetValueCtx.(*mongodb.LiteralValueContext)
+		if !ok {
+			v.err = fmt.Errorf("renameCollection() dropTarget must be a boolean")
+			return
+		}
+
+		switch literalVal.Literal().(type) {
+		case *mongodb.TrueLiteralContext:
+			dropTarget := true
+			v.operation.DropTarget = &dropTarget
+		case *mongodb.FalseLiteralContext:
+			dropTarget := false
+			v.operation.DropTarget = &dropTarget
+		default:
+			v.err = fmt.Errorf("renameCollection() dropTarget must be a boolean")
+			return
+		}
+	}
+
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("renameCollection() takes at most 2 arguments")
+		return
+	}
+}

@@ -60,6 +60,11 @@ func (v *visitor) visitDbStatement(ctx mongodb.IDbStatementContext) {
 	case *mongodb.GetCollectionInfosContext:
 		v.operation.OpType = OpGetCollectionInfos
 		v.extractGetCollectionInfosArgs(c)
+	case *mongodb.CreateCollectionContext:
+		v.operation.OpType = OpCreateCollection
+		v.extractCreateCollectionArgs(c)
+	case *mongodb.DropDatabaseContext:
+		v.operation.OpType = OpDropDatabase
 	}
 }
 
@@ -213,21 +218,25 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		v.operation.OpType = OpFindOneAndDelete
 		v.extractFindOneAndDeleteArgs(mc.FindOneAndDeleteMethod())
 
-	// Planned M3 index operations - return PlannedOperationError for fallback
+	// Supported M3 index operations
 	case mc.CreateIndexMethod() != nil:
-		v.handleUnsupportedMethod("collection", "createIndex")
+		v.operation.OpType = OpCreateIndex
+		v.extractCreateIndexArgs(mc.CreateIndexMethod())
 	case mc.CreateIndexesMethod() != nil:
-		v.handleUnsupportedMethod("collection", "createIndexes")
+		v.handleUnsupportedMethod("collection", "createIndexes") // Lower ROI, keep as planned
 	case mc.DropIndexMethod() != nil:
-		v.handleUnsupportedMethod("collection", "dropIndex")
+		v.operation.OpType = OpDropIndex
+		v.extractDropIndexArgs(mc.DropIndexMethod())
 	case mc.DropIndexesMethod() != nil:
-		v.handleUnsupportedMethod("collection", "dropIndexes")
+		v.operation.OpType = OpDropIndexes
+		v.extractDropIndexesArgs(mc.DropIndexesMethod())
 
-	// Planned M3 collection management - return PlannedOperationError for fallback
+	// Supported M3 collection management
 	case mc.DropMethod() != nil:
-		v.handleUnsupportedMethod("collection", "drop")
+		v.operation.OpType = OpDrop
 	case mc.RenameCollectionMethod() != nil:
-		v.handleUnsupportedMethod("collection", "renameCollection")
+		v.operation.OpType = OpRenameCollection
+		v.extractRenameCollectionArgs(mc.RenameCollectionMethod())
 
 	// Planned M3 stats operations - return PlannedOperationError for fallback
 	case mc.StatsMethod() != nil:

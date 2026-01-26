@@ -60,6 +60,21 @@ func Execute(ctx context.Context, client *mongo.Client, database string, op *tra
 		return executeFindOneAndReplace(ctx, client, database, op)
 	case translator.OpFindOneAndDelete:
 		return executeFindOneAndDelete(ctx, client, database, op)
+	// M3: Administrative Operations
+	case translator.OpCreateIndex:
+		return executeCreateIndex(ctx, client, database, op)
+	case translator.OpDropIndex:
+		return executeDropIndex(ctx, client, database, op)
+	case translator.OpDropIndexes:
+		return executeDropIndexes(ctx, client, database, op)
+	case translator.OpDrop:
+		return executeDrop(ctx, client, database, op)
+	case translator.OpCreateCollection:
+		return executeCreateCollection(ctx, client, database, op)
+	case translator.OpDropDatabase:
+		return executeDropDatabase(ctx, client, database)
+	case translator.OpRenameCollection:
+		return executeRenameCollection(ctx, client, database, op)
 	default:
 		return nil, fmt.Errorf("unsupported operation: %s", statement)
 	}
