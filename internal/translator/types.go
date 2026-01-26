@@ -29,6 +29,14 @@ const (
 	OpFindOneAndUpdate
 	OpFindOneAndReplace
 	OpFindOneAndDelete
+	// M3: Administrative Operations
+	OpCreateIndex
+	OpDropIndex
+	OpDropIndexes
+	OpDrop
+	OpCreateCollection
+	OpDropDatabase
+	OpRenameCollection
 )
 
 // Operation represents a parsed MongoDB operation.
@@ -70,4 +78,17 @@ type Operation struct {
 	BypassDocumentValidation *bool   // bypass schema validation
 	Comment                  any     // comment for server logs/profiling
 	WriteConcern             bson.D  // write concern settings (w, j, wtimeout)
+
+	// M3: Administrative operation fields
+	IndexKeys   bson.D // createIndex key specification
+	IndexName   string // dropIndex index name (or createIndex name option)
+	NewName     string // renameCollection new collection name
+	DropTarget  *bool  // renameCollection dropTarget option
+	IndexModels []IndexModel // createIndexes array of index specifications
+}
+
+// IndexModel represents a single index specification for createIndexes.
+type IndexModel struct {
+	Keys    bson.D
+	Options bson.D
 }

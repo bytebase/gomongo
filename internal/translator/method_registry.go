@@ -17,24 +17,16 @@ type methodInfo struct {
 // methodRegistry contains only methods we plan to implement (M2, M3).
 // If a method is NOT in this registry, it's unsupported (throw error, no fallback).
 // If a method IS in this registry, it's planned (fallback to mongosh).
+// Note: Methods that are now implemented have been removed from this registry.
 var methodRegistry = map[string]methodInfo{
 	// ============================================================
-	// MILESTONE 3: Administrative Operations (22 methods)
+	// MILESTONE 3: Administrative Operations (remaining planned)
 	// ============================================================
 
-	// Index Management (4)
-	"collection:createIndex":   {status: statusPlanned},
+	// Index Management (1 remaining - createIndexes has lower ROI)
 	"collection:createIndexes": {status: statusPlanned},
-	"collection:dropIndex":     {status: statusPlanned},
-	"collection:dropIndexes":   {status: statusPlanned},
 
-	// Collection Management (4)
-	"database:createCollection":   {status: statusPlanned},
-	"collection:drop":             {status: statusPlanned},
-	"collection:renameCollection": {status: statusPlanned},
-	"database:dropDatabase":       {status: statusPlanned},
-
-	// Database Information (7)
+	// Database Information (7) - lower ROI, keep as planned
 	"database:stats":           {status: statusPlanned},
 	"collection:stats":         {status: statusPlanned},
 	"database:serverStatus":    {status: statusPlanned},
@@ -43,7 +35,7 @@ var methodRegistry = map[string]methodInfo{
 	"database:hostInfo":        {status: statusPlanned},
 	"database:listCommands":    {status: statusPlanned},
 
-	// Collection Information (7)
+	// Collection Information (7) - lower ROI, keep as planned
 	"collection:dataSize":       {status: statusPlanned},
 	"collection:storageSize":    {status: statusPlanned},
 	"collection:totalIndexSize": {status: statusPlanned},

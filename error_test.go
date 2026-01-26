@@ -34,13 +34,14 @@ func TestPlannedOperation(t *testing.T) {
 		gc := gomongo.NewClient(db.Client)
 		ctx := context.Background()
 
-		// createIndex is a planned M3 operation - should return PlannedOperationError
-		_, err := gc.Execute(ctx, dbName, "db.users.createIndex({ name: 1 })")
+		// createIndexes is a planned M3 operation - should return PlannedOperationError
+		// (createIndex is now implemented, so we use createIndexes instead)
+		_, err := gc.Execute(ctx, dbName, "db.users.createIndexes([{ key: { name: 1 } }])")
 		require.Error(t, err)
 
 		var plannedErr *gomongo.PlannedOperationError
 		require.ErrorAs(t, err, &plannedErr)
-		require.Equal(t, "createIndex()", plannedErr.Operation)
+		require.Equal(t, "createIndexes()", plannedErr.Operation)
 	})
 }
 
@@ -83,9 +84,12 @@ func TestUnsupportedOptionError(t *testing.T) {
 func TestMethodRegistryStats(t *testing.T) {
 	total := gomongo.MethodRegistryStats()
 
-	// Registry should contain M3 (22) planned methods
-	// M2 write operations have been implemented and removed from the registry
-	require.Equal(t, 22, total, "expected 22 planned methods in registry (M3: 22)")
+	// Registry should contain 15 planned methods after M3 high-ROI implementations
+	// M3 high-ROI methods implemented (removed from registry):
+	//   - createIndex, dropIndex, dropIndexes (index management: 3)
+	//   - drop, createCollection, dropDatabase, renameCollection (collection management: 4)
+	// M3 remaining planned methods: 15 (originally 22)
+	require.Equal(t, 15, total, "expected 15 planned methods in registry (M3 remaining)")
 
 	// Log stats for visibility
 	t.Logf("Method Registry Stats: total=%d planned methods", total)

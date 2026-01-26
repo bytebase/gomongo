@@ -101,3 +101,58 @@ func (v *visitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollectionInfosC
 		return
 	}
 }
+
+// extractCreateCollectionArgs extracts arguments from CreateCollectionContext.
+func (v *visitor) extractCreateCollectionArgs(ctx *mongodb.CreateCollectionContext) {
+	args := ctx.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("createCollection() requires a collection name")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("createCollection() requires a collection name")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("createCollection() requires a collection name")
+		return
+	}
+
+	// First argument: collection name (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("createCollection() collection name must be a string")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("createCollection() collection name must be a string")
+		return
+	}
+
+	literalValue, ok := valueCtx.(*mongodb.LiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("createCollection() collection name must be a string")
+		return
+	}
+
+	stringLiteral, ok := literalValue.Literal().(*mongodb.StringLiteralValueContext)
+	if !ok {
+		v.err = fmt.Errorf("createCollection() collection name must be a string")
+		return
+	}
+
+	v.operation.Collection = unquoteString(stringLiteral.StringLiteral().GetText())
+
+	// Second argument: options (optional) - we don't extract options for basic implementation
+	// The driver will handle any valid options
+	if len(allArgs) > 2 {
+		v.err = fmt.Errorf("createCollection() takes at most 2 arguments")
+		return
+	}
+}
