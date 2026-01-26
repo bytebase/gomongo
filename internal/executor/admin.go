@@ -144,27 +144,13 @@ func keysMatch(a any, b bson.D) bool {
 // valuesEqual compares two values that could be different numeric types.
 func valuesEqual(a, b any) bool {
 	// Convert both to int64 for comparison if they're numeric
-	aInt, aOk := toInt64(a)
-	bInt, bOk := toInt64(b)
+	aInt, aOk := translator.ToInt64(a)
+	bInt, bOk := translator.ToInt64(b)
 	if aOk && bOk {
 		return aInt == bInt
 	}
 	// Otherwise compare directly
 	return a == b
-}
-
-func toInt64(v any) (int64, bool) {
-	switch n := v.(type) {
-	case int:
-		return int64(n), true
-	case int32:
-		return int64(n), true
-	case int64:
-		return n, true
-	case float64:
-		return int64(n), true
-	}
-	return 0, false
 }
 
 // executeDropIndexes executes a db.collection.dropIndexes() command.

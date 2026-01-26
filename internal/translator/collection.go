@@ -1926,7 +1926,7 @@ func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) 
 					return
 				}
 			case "expireAfterSeconds":
-				if val, ok := toInt32(opt.Value); ok {
+				if val, ok := ToInt32(opt.Value); ok {
 					v.operation.IndexTTL = &val
 				} else {
 					v.err = fmt.Errorf("createIndex() expireAfterSeconds must be a number")

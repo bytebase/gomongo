@@ -184,14 +184,14 @@ func (v *visitor) extractCreateCollectionArgs(ctx *mongodb.CreateCollectionConte
 					return
 				}
 			case "size":
-				if val, ok := toInt64(opt.Value); ok {
+				if val, ok := ToInt64(opt.Value); ok {
 					v.operation.CollectionSize = &val
 				} else {
 					v.err = fmt.Errorf("createCollection() size must be a number")
 					return
 				}
 			case "max":
-				if val, ok := toInt64(opt.Value); ok {
+				if val, ok := ToInt64(opt.Value); ok {
 					v.operation.CollectionMax = &val
 				} else {
 					v.err = fmt.Errorf("createCollection() max must be a number")
