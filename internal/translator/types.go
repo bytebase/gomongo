@@ -80,15 +80,8 @@ type Operation struct {
 	WriteConcern             bson.D  // write concern settings (w, j, wtimeout)
 
 	// M3: Administrative operation fields
-	IndexKeys   bson.D // createIndex key specification
-	IndexName   string // dropIndex index name (or createIndex name option)
-	NewName     string // renameCollection new collection name
-	DropTarget  *bool  // renameCollection dropTarget option
-	IndexModels []IndexModel // createIndexes array of index specifications
-}
-
-// IndexModel represents a single index specification for createIndexes.
-type IndexModel struct {
-	Keys    bson.D
-	Options bson.D
+	IndexKeys  bson.D // createIndex key specification
+	IndexName  string // dropIndex index name (or createIndex name option)
+	NewName    string // renameCollection new collection name
+	DropTarget *bool  // renameCollection dropTarget option
 }

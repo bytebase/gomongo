@@ -1878,6 +1878,7 @@ func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) 
 	v.operation.IndexKeys = keys
 
 	// Second argument: options (optional)
+	// Currently only the "name" option is supported.
 	if len(allArgs) >= 2 {
 		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
 		if !ok {
@@ -1901,7 +1902,7 @@ func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) 
 			return
 		}
 
-		// Extract supported options
+		// Only "name" option is currently supported
 		for _, opt := range options {
 			switch opt.Key {
 			case "name":
@@ -1911,16 +1912,15 @@ func (v *visitor) extractCreateIndexArgs(ctx mongodb.ICreateIndexMethodContext) 
 					v.err = fmt.Errorf("createIndex() name must be a string")
 					return
 				}
-			case "unique", "sparse", "background", "expireAfterSeconds", "partialFilterExpression",
-				"collation", "wildcardProjection", "hidden":
-				// These are valid options, we store them in a generic way
-				// For now, we only explicitly handle "name", others are passed through
 			default:
-				// Allow any option, driver will validate
+				// Reject unsupported options to avoid silently ignoring them
+				v.err = &UnsupportedOptionError{
+					Method: "createIndex()",
+					Option: opt.Key,
+				}
+				return
 			}
 		}
-		// Store the entire options document for the driver
-		v.operation.Collation = options // Reusing Collation field as options container
 	}
 
 	if len(allArgs) > 2 {
@@ -2010,9 +2010,10 @@ func (v *visitor) extractDropIndexesArgs(ctx mongodb.IDropIndexesMethodContext) 
 		}
 		v.operation.IndexName = unquoteString(strLit.StringLiteral().GetText())
 	case *mongodb.ArrayValueContext:
-		// Array of index names - we'll just drop "*" for simplicity
-		// The driver handles dropping individual indexes
-		v.operation.IndexName = "*"
+		// Array of index names is not currently supported in this translator.
+		// Silently broadening scope to drop all indexes ("*") would be unsafe.
+		v.err = fmt.Errorf("dropIndexes() with an array of index names is not supported; use a single index name or \"*\" to drop all indexes")
+		return
 	default:
 		v.err = fmt.Errorf("dropIndexes() argument must be a string or array")
 	}

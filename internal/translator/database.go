@@ -149,10 +149,11 @@ func (v *visitor) extractCreateCollectionArgs(ctx *mongodb.CreateCollectionConte
 
 	v.operation.Collection = unquoteString(stringLiteral.StringLiteral().GetText())
 
-	// Second argument: options (optional) - we don't extract options for basic implementation
-	// The driver will handle any valid options
-	if len(allArgs) > 2 {
-		v.err = fmt.Errorf("createCollection() takes at most 2 arguments")
+	// Second argument: options (optional)
+	// Options are currently not supported; reject calls that attempt to use them
+	// to avoid silently ignoring user-specified options.
+	if len(allArgs) > 1 {
+		v.err = fmt.Errorf("createCollection() options argument is not supported yet")
 		return
 	}
 }
