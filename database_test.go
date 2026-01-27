@@ -37,19 +37,17 @@ func TestShowDatabases(t *testing.T) {
 				result, err := gc.Execute(ctx, dbName, tc.statement)
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.GreaterOrEqual(t, result.RowCount, 1)
+				require.GreaterOrEqual(t, len(result.Value), 1)
 
-				// Check that dbName is in the result (as JSON object with "name" field)
+				// Check that dbName is in the result (values are strings)
 				found := false
-				for _, row := range result.Rows {
-					var doc bson.M
-					err := bson.UnmarshalExtJSON([]byte(row), false, &doc)
-					if err == nil && doc["name"] == dbName {
+				for _, v := range result.Value {
+					if name, ok := v.(string); ok && name == dbName {
 						found = true
 						break
 					}
 				}
-				require.True(t, found, "expected database '%s' in result, got: %v", dbName, result.Rows)
+				require.True(t, found, "expected database '%s' in result", dbName)
 			})
 		}
 	})
@@ -73,15 +71,12 @@ func TestShowCollections(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "show collections")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
-		// Check that both collections are in the result (as JSON objects with "name" field)
+		// Check that both collections are in the result (values are strings)
 		collectionSet := make(map[string]bool)
-		for _, row := range result.Rows {
-			var doc bson.M
-			err := bson.UnmarshalExtJSON([]byte(row), false, &doc)
-			require.NoError(t, err, "row should be valid JSON: %s", row)
-			if name, ok := doc["name"].(string); ok {
+		for _, v := range result.Value {
+			if name, ok := v.(string); ok {
 				collectionSet[name] = true
 			}
 		}
@@ -108,15 +103,12 @@ func TestGetCollectionNames(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.getCollectionNames()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
-		// Check that both collections are in the result (as JSON objects with "name" field)
+		// Check that both collections are in the result (values are strings)
 		collectionSet := make(map[string]bool)
-		for _, row := range result.Rows {
-			var doc bson.M
-			err := bson.UnmarshalExtJSON([]byte(row), false, &doc)
-			require.NoError(t, err, "row should be valid JSON: %s", row)
-			if name, ok := doc["name"].(string); ok {
+		for _, v := range result.Value {
+			if name, ok := v.(string); ok {
 				collectionSet[name] = true
 			}
 		}
@@ -144,10 +136,11 @@ func TestGetCollectionInfos(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.getCollectionInfos()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
 		// Verify that results contain collection info structure
-		for _, row := range result.Rows {
+		rows := valuesToStrings(result.Value)
+		for _, row := range rows {
 			require.Contains(t, row, `"name"`)
 			require.Contains(t, row, `"type"`)
 		}
@@ -173,11 +166,12 @@ func TestGetCollectionInfosWithFilter(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.getCollectionInfos({ name: "users" })`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
 
 		// Verify that the returned collection is "users"
-		require.Contains(t, result.Rows[0], `"name": "users"`)
-		require.Contains(t, result.Rows[0], `"type": "collection"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"name": "users"`)
+		require.Contains(t, row, `"type": "collection"`)
 	})
 }
 
@@ -198,8 +192,8 @@ func TestGetCollectionInfosEmptyResult(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.getCollectionInfos({ name: "nonexistent" })`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 0, result.RowCount)
-		require.Empty(t, result.Rows)
+		require.Equal(t, 0, len(result.Value))
+		require.Empty(t, result.Value)
 	})
 }
 
@@ -218,10 +212,11 @@ func TestGetCollectionInfosNameOnly(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.getCollectionInfos({}, { nameOnly: true })`)
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, result.RowCount, 1)
+		require.GreaterOrEqual(t, len(result.Value), 1)
 
 		// With nameOnly: true, the result should contain "name" field
-		require.Contains(t, result.Rows[0], `"name"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"name"`)
 	})
 }
 
@@ -240,7 +235,7 @@ func TestGetCollectionInfosAuthorizedCollections(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.getCollectionInfos({}, { authorizedCollections: true })`)
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, result.RowCount, 1)
+		require.GreaterOrEqual(t, len(result.Value), 1)
 	})
 }
 

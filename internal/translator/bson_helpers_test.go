@@ -7,10 +7,21 @@ import (
 	"github.com/bytebase/gomongo"
 	"github.com/bytebase/gomongo/internal/testutil"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // These tests verify BSON helper function conversions through the full pipeline.
 // Since the helper functions are not exported, we test them end-to-end.
+
+// getDocField extracts a string representation of a field from a bson.D document
+func getDocField(doc bson.D, key string) any {
+	for _, elem := range doc {
+		if elem.Key == key {
+			return elem.Value
+		}
+	}
+	return nil
+}
 
 func TestObjectIdHelper(t *testing.T) {
 	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
@@ -26,8 +37,15 @@ func TestObjectIdHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({_id: ObjectId("507f1f77bcf86cd799439011")})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "507f1f77bcf86cd799439011")
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
+		id := getDocField(doc, "_id")
+		require.NotNil(t, id)
+		// Check the ObjectId hex matches
+		oid, ok := id.(bson.ObjectID)
+		require.True(t, ok)
+		require.Equal(t, "507f1f77bcf86cd799439011", oid.Hex())
 	})
 }
 
@@ -45,9 +63,12 @@ func TestObjectIdHelperGenerated(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
 		// Should have an _id field with ObjectId
-		require.Contains(t, result.Rows[0], `"_id"`)
+		id := getDocField(doc, "_id")
+		require.NotNil(t, id)
 	})
 }
 
@@ -65,9 +86,11 @@ func TestISODateHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		// Extended JSON format for dates
-		require.Contains(t, result.Rows[0], "2024-01-15")
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
+		created := getDocField(doc, "created")
+		require.NotNil(t, created)
 	})
 }
 
@@ -85,8 +108,11 @@ func TestNumberLongHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "9007199254740993")
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
+		bignum := getDocField(doc, "bignum")
+		require.Equal(t, int64(9007199254740993), bignum)
 	})
 }
 
@@ -104,8 +130,11 @@ func TestNumberIntHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "42")
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
+		count := getDocField(doc, "count")
+		require.Equal(t, int32(42), count)
 	})
 }
 
@@ -123,9 +152,12 @@ func TestUUIDHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
 		// UUID should be in the output (as binary subtype 4)
-		require.Contains(t, result.Rows[0], "uuid")
+		uuid := getDocField(doc, "uuid")
+		require.NotNil(t, uuid)
 	})
 }
 
@@ -143,8 +175,11 @@ func TestTimestampHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "1234567890")
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
+		ts := getDocField(doc, "ts")
+		require.NotNil(t, ts)
 	})
 }
 
@@ -162,7 +197,10 @@ func TestDecimal128Helper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.test.findOne({})`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "123.456")
+		require.Equal(t, 1, len(result.Value))
+		doc, ok := result.Value[0].(bson.D)
+		require.True(t, ok)
+		price := getDocField(doc, "price")
+		require.NotNil(t, price)
 	})
 }

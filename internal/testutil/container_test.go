@@ -27,7 +27,7 @@ func TestRunOnAllDBsHelper(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, "db.test.find()")
 		require.NoError(t, err)
-		require.Equal(t, 0, result.RowCount)
+		require.Equal(t, 0, len(result.Value))
 	})
 }
 

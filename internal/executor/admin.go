@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bytebase/gomongo/internal/translator"
+	"github.com/bytebase/gomongo/types"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -49,8 +50,8 @@ func executeCreateIndex(ctx context.Context, client *mongo.Client, database stri
 	}
 
 	return &Result{
-		Rows:     []string{indexName},
-		RowCount: 1,
+		Operation: types.OpCreateIndex,
+		Value:     []any{indexName},
 	}, nil
 }
 
@@ -94,15 +95,11 @@ func executeDropIndex(ctx context.Context, client *mongo.Client, database string
 		return nil, fmt.Errorf("dropIndex failed: %w", err)
 	}
 
-	response := bson.M{"ok": 1}
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
+	response := bson.D{{Key: "ok", Value: int32(1)}}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpDropIndex,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -177,15 +174,11 @@ func executeDropIndexes(ctx context.Context, client *mongo.Client, database stri
 		return nil, fmt.Errorf("dropIndexes failed: %w", err)
 	}
 
-	response := bson.M{"ok": 1}
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
+	response := bson.D{{Key: "ok", Value: int32(1)}}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpDropIndexes,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -199,8 +192,8 @@ func executeDrop(ctx context.Context, client *mongo.Client, database string, op 
 	}
 
 	return &Result{
-		Rows:     []string{"true"},
-		RowCount: 1,
+		Operation: types.OpDrop,
+		Value:     []any{true},
 	}, nil
 }
 
@@ -234,15 +227,11 @@ func executeCreateCollection(ctx context.Context, client *mongo.Client, database
 		return nil, fmt.Errorf("createCollection failed: %w", err)
 	}
 
-	response := bson.M{"ok": 1}
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
+	response := bson.D{{Key: "ok", Value: int32(1)}}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpCreateCollection,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -253,15 +242,14 @@ func executeDropDatabase(ctx context.Context, client *mongo.Client, database str
 		return nil, fmt.Errorf("dropDatabase failed: %w", err)
 	}
 
-	response := bson.M{"ok": 1, "dropped": database}
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+	response := bson.D{
+		{Key: "ok", Value: int32(1)},
+		{Key: "dropped", Value: database},
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpDropDatabase,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -282,14 +270,10 @@ func executeRenameCollection(ctx context.Context, client *mongo.Client, database
 		return nil, fmt.Errorf("renameCollection failed: %w", err)
 	}
 
-	response := bson.M{"ok": 1}
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
+	response := bson.D{{Key: "ok", Value: int32(1)}}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpRenameCollection,
+		Value:     []any{response},
 	}, nil
 }

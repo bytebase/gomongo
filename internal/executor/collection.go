@@ -2,11 +2,11 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/bytebase/gomongo/internal/translator"
+	"github.com/bytebase/gomongo/types"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -81,28 +81,28 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 	}
 	defer func() { _ = cursor.Close(ctx) }()
 
-	var rows []string
+	var docs []bson.D
 	for cursor.Next(ctx) {
-		var doc bson.M
+		var doc bson.D
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("decode failed: %w", err)
 		}
-
-		// Marshal to Extended JSON (Relaxed)
-		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("marshal failed: %w", err)
-		}
-		rows = append(rows, string(jsonBytes))
+		docs = append(docs, doc)
 	}
 
 	if err := cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %w", err)
 	}
 
+	// Convert []bson.D to []any
+	values := make([]any, len(docs))
+	for i, doc := range docs {
+		values[i] = doc
+	}
+
 	return &Result{
-		Rows:     rows,
-		RowCount: len(rows),
+		Operation: types.OpFind,
+		Value:     values,
 	}, nil
 }
 
@@ -142,26 +142,21 @@ func executeFindOne(ctx context.Context, client *mongo.Client, database string, 
 		defer cancel()
 	}
 
-	var doc bson.M
+	var doc bson.D
 	err := collection.FindOne(ctx, filter, opts).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return &Result{
-				Rows:     nil,
-				RowCount: 0,
+				Operation: types.OpFindOne,
+				Value:     []any{},
 			}, nil
 		}
 		return nil, fmt.Errorf("findOne failed: %w", err)
 	}
 
-	jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
-
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpFindOne,
+		Value:     []any{doc},
 	}, nil
 }
 
@@ -192,18 +187,13 @@ func executeAggregate(ctx context.Context, client *mongo.Client, database string
 	}
 	defer func() { _ = cursor.Close(ctx) }()
 
-	var rows []string
+	var values []any
 	for cursor.Next(ctx) {
-		var doc bson.M
+		var doc bson.D
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("decode failed: %w", err)
 		}
-
-		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("marshal failed: %w", err)
-		}
-		rows = append(rows, string(jsonBytes))
+		values = append(values, doc)
 	}
 
 	if err := cursor.Err(); err != nil {
@@ -211,8 +201,8 @@ func executeAggregate(ctx context.Context, client *mongo.Client, database string
 	}
 
 	return &Result{
-		Rows:     rows,
-		RowCount: len(rows),
+		Operation: types.OpAggregate,
+		Value:     values,
 	}, nil
 }
 
@@ -226,18 +216,13 @@ func executeGetIndexes(ctx context.Context, client *mongo.Client, database strin
 	}
 	defer func() { _ = cursor.Close(ctx) }()
 
-	var rows []string
+	var values []any
 	for cursor.Next(ctx) {
-		var doc bson.M
+		var doc bson.D
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("decode failed: %w", err)
 		}
-
-		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("marshal failed: %w", err)
-		}
-		rows = append(rows, string(jsonBytes))
+		values = append(values, doc)
 	}
 
 	if err := cursor.Err(); err != nil {
@@ -245,8 +230,8 @@ func executeGetIndexes(ctx context.Context, client *mongo.Client, database strin
 	}
 
 	return &Result{
-		Rows:     rows,
-		RowCount: len(rows),
+		Operation: types.OpGetIndexes,
+		Value:     values,
 	}, nil
 }
 
@@ -285,8 +270,8 @@ func executeCountDocuments(ctx context.Context, client *mongo.Client, database s
 	}
 
 	return &Result{
-		Rows:     []string{fmt.Sprintf("%d", count)},
-		RowCount: 1,
+		Operation: types.OpCountDocuments,
+		Value:     []any{count},
 	}, nil
 }
 
@@ -307,8 +292,8 @@ func executeEstimatedDocumentCount(ctx context.Context, client *mongo.Client, da
 	}
 
 	return &Result{
-		Rows:     []string{fmt.Sprintf("%d", count)},
-		RowCount: 1,
+		Operation: types.OpEstimatedDocumentCount,
+		Value:     []any{count},
 	}, nil
 }
 
@@ -338,31 +323,8 @@ func executeDistinct(ctx context.Context, client *mongo.Client, database string,
 		return nil, fmt.Errorf("decode failed: %w", err)
 	}
 
-	var rows []string
-	for _, val := range values {
-		jsonBytes, err := marshalValue(val)
-		if err != nil {
-			return nil, fmt.Errorf("marshal failed: %w", err)
-		}
-		rows = append(rows, string(jsonBytes))
-	}
-
 	return &Result{
-		Rows:     rows,
-		RowCount: len(rows),
+		Operation: types.OpDistinct,
+		Value:     values,
 	}, nil
-}
-
-// marshalValue marshals a value to JSON.
-// bson.MarshalExtJSONIndent only works for documents/arrays at top level,
-// so we use encoding/json for primitive values (strings, numbers, booleans).
-func marshalValue(val any) ([]byte, error) {
-	switch v := val.(type) {
-	case bson.M, bson.D, map[string]any:
-		return bson.MarshalExtJSONIndent(v, false, false, "", "  ")
-	case bson.A, []any:
-		return bson.MarshalExtJSONIndent(v, false, false, "", "  ")
-	default:
-		return json.Marshal(v)
-	}
 }

@@ -1,47 +1,13 @@
 package translator
 
-import "go.mongodb.org/mongo-driver/v2/bson"
-
-// OperationType represents the type of MongoDB operation.
-type OperationType int
-
-const (
-	OpUnknown OperationType = iota
-	OpFind
-	OpFindOne
-	OpAggregate
-	OpShowDatabases
-	OpShowCollections
-	OpGetCollectionNames
-	OpGetCollectionInfos
-	OpGetIndexes
-	OpCountDocuments
-	OpEstimatedDocumentCount
-	OpDistinct
-	// M2: Write Operations
-	OpInsertOne
-	OpInsertMany
-	OpUpdateOne
-	OpUpdateMany
-	OpReplaceOne
-	OpDeleteOne
-	OpDeleteMany
-	OpFindOneAndUpdate
-	OpFindOneAndReplace
-	OpFindOneAndDelete
-	// M3: Administrative Operations
-	OpCreateIndex
-	OpDropIndex
-	OpDropIndexes
-	OpDrop
-	OpCreateCollection
-	OpDropDatabase
-	OpRenameCollection
+import (
+	"github.com/bytebase/gomongo/types"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // Operation represents a parsed MongoDB operation.
 type Operation struct {
-	OpType     OperationType
+	OpType     types.OperationType
 	Collection string
 	Filter     bson.D
 	// Read operation options (find, findOne)
