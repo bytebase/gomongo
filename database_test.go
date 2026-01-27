@@ -3,7 +3,6 @@ package gomongo_test
 import (
 	"context"
 	"fmt"
-	"slices"
 	"testing"
 
 	"github.com/bytebase/gomongo"
@@ -40,8 +39,17 @@ func TestShowDatabases(t *testing.T) {
 				require.NotNil(t, result)
 				require.GreaterOrEqual(t, result.RowCount, 1)
 
-				// Check that dbName is in the result
-				require.True(t, slices.Contains(result.Rows, dbName), "expected '%s' in database list, got: %v", dbName, result.Rows)
+				// Check that dbName is in the result (as JSON object with "name" field)
+				found := false
+				for _, row := range result.Rows {
+					var doc bson.M
+					err := bson.UnmarshalExtJSON([]byte(row), false, &doc)
+					if err == nil && doc["name"] == dbName {
+						found = true
+						break
+					}
+				}
+				require.True(t, found, "expected database '%s' in result, got: %v", dbName, result.Rows)
 			})
 		}
 	})
@@ -67,10 +75,15 @@ func TestShowCollections(t *testing.T) {
 		require.NotNil(t, result)
 		require.Equal(t, 2, result.RowCount)
 
-		// Check that both collections are in the result
+		// Check that both collections are in the result (as JSON objects with "name" field)
 		collectionSet := make(map[string]bool)
 		for _, row := range result.Rows {
-			collectionSet[row] = true
+			var doc bson.M
+			err := bson.UnmarshalExtJSON([]byte(row), false, &doc)
+			require.NoError(t, err, "row should be valid JSON: %s", row)
+			if name, ok := doc["name"].(string); ok {
+				collectionSet[name] = true
+			}
 		}
 		require.True(t, collectionSet["users"], "expected 'users' collection")
 		require.True(t, collectionSet["orders"], "expected 'orders' collection")
@@ -97,10 +110,15 @@ func TestGetCollectionNames(t *testing.T) {
 		require.NotNil(t, result)
 		require.Equal(t, 2, result.RowCount)
 
-		// Check that both collections are in the result
+		// Check that both collections are in the result (as JSON objects with "name" field)
 		collectionSet := make(map[string]bool)
 		for _, row := range result.Rows {
-			collectionSet[row] = true
+			var doc bson.M
+			err := bson.UnmarshalExtJSON([]byte(row), false, &doc)
+			require.NoError(t, err, "row should be valid JSON: %s", row)
+			if name, ok := doc["name"].(string); ok {
+				collectionSet[name] = true
+			}
 		}
 		require.True(t, collectionSet["products"], "expected 'products' collection")
 		require.True(t, collectionSet["categories"], "expected 'categories' collection")

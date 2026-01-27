@@ -17,8 +17,15 @@ func executeShowCollections(ctx context.Context, client *mongo.Client, database 
 		return nil, fmt.Errorf("list collections failed: %w", err)
 	}
 
-	rows := make([]string, len(names))
-	copy(rows, names)
+	rows := make([]string, 0, len(names))
+	for _, name := range names {
+		doc := bson.M{"name": name}
+		jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("marshal failed: %w", err)
+		}
+		rows = append(rows, string(jsonBytes))
+	}
 
 	return &Result{
 		Rows:     rows,
