@@ -22,16 +22,18 @@ func TestInsertOneBasic(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.insertOne({ name: "alice", age: 30 })`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], `"acknowledged": true`)
-		require.Contains(t, result.Rows[0], `"insertedId"`)
+		require.Equal(t, 1, len(result.Value))
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"acknowledged": true`)
+		require.Contains(t, row, `"insertedId"`)
 
 		// Verify document was inserted
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.find({ name: "alice" })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, verifyResult.RowCount)
-		require.Contains(t, verifyResult.Rows[0], `"alice"`)
-		require.Contains(t, verifyResult.Rows[0], `"age": 30`)
+		require.Equal(t, 1, len(verifyResult.Value))
+		verifyRow := valueToJSON(verifyResult.Value[0])
+		require.Contains(t, verifyRow, `"alice"`)
+		require.Contains(t, verifyRow, `"age": 30`)
 	})
 }
 
@@ -47,13 +49,15 @@ func TestInsertOneWithObjectId(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.insertOne({ _id: ObjectId("507f1f77bcf86cd799439011"), name: "bob" })`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Contains(t, result.Rows[0], `"507f1f77bcf86cd799439011"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"507f1f77bcf86cd799439011"`)
 
 		// Verify
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ _id: ObjectId("507f1f77bcf86cd799439011") })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, verifyResult.RowCount)
-		require.Contains(t, verifyResult.Rows[0], `"bob"`)
+		require.Equal(t, 1, len(verifyResult.Value))
+		verifyRow := valueToJSON(verifyResult.Value[0])
+		require.Contains(t, verifyRow, `"bob"`)
 	})
 }
 
@@ -76,8 +80,9 @@ func TestInsertOneWithNestedDocument(t *testing.T) {
 		// Verify nested structure
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ name: "carol" })`)
 		require.NoError(t, err)
-		require.Contains(t, verifyResult.Rows[0], `"city": "NYC"`)
-		require.Contains(t, verifyResult.Rows[0], `"admin"`)
+		verifyRow := valueToJSON(verifyResult.Value[0])
+		require.Contains(t, verifyRow, `"city": "NYC"`)
+		require.Contains(t, verifyRow, `"admin"`)
 	})
 }
 
@@ -127,14 +132,17 @@ func TestInsertManyBasic(t *testing.T) {
 	])`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], `"acknowledged": true`)
-		require.Contains(t, result.Rows[0], `"insertedIds"`)
+		require.Equal(t, 1, len(result.Value))
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"acknowledged": true`)
+		require.Contains(t, row, `"insertedIds"`)
 
 		// Verify all documents were inserted
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.countDocuments()`)
 		require.NoError(t, err)
-		require.Equal(t, "3", verifyResult.Rows[0])
+		count, ok := verifyResult.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(3), count)
 	})
 }
 
@@ -166,14 +174,16 @@ func TestUpdateOneBasic(t *testing.T) {
 		// Update
 		result, err := gc.Execute(ctx, dbName, `db.users.updateOne({ name: "alice" }, { $set: { age: 31 } })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"acknowledged": true`)
-		require.Contains(t, result.Rows[0], `"matchedCount": 1`)
-		require.Contains(t, result.Rows[0], `"modifiedCount": 1`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"acknowledged": true`)
+		require.Contains(t, row, `"matchedCount": 1`)
+		require.Contains(t, row, `"modifiedCount": 1`)
 
 		// Verify
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ name: "alice" })`)
 		require.NoError(t, err)
-		require.Contains(t, verifyResult.Rows[0], `"age": 31`)
+		verifyRow := valueToJSON(verifyResult.Value[0])
+		require.Contains(t, verifyRow, `"age": 31`)
 	})
 }
 
@@ -187,8 +197,9 @@ func TestUpdateOneNoMatch(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.updateOne({ name: "nobody" }, { $set: { age: 99 } })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"matchedCount": 0`)
-		require.Contains(t, result.Rows[0], `"modifiedCount": 0`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"matchedCount": 0`)
+		require.Contains(t, row, `"modifiedCount": 0`)
 	})
 }
 
@@ -206,12 +217,13 @@ func TestUpdateOneUpsert(t *testing.T) {
 		{ upsert: true }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"upsertedId"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"upsertedId"`)
 
 		// Verify upserted document
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ name: "newuser" })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, verifyResult.RowCount)
+		require.Equal(t, 1, len(verifyResult.Value))
 	})
 }
 
@@ -237,8 +249,9 @@ func TestUpdateManyBasic(t *testing.T) {
 		{ $set: { verified: true } }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"matchedCount": 2`)
-		require.Contains(t, result.Rows[0], `"modifiedCount": 2`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"matchedCount": 2`)
+		require.Contains(t, row, `"modifiedCount": 2`)
 	})
 }
 
@@ -252,8 +265,9 @@ func TestUpdateManyNoMatch(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.updateMany({ status: "nonexistent" }, { $set: { verified: true } })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"matchedCount": 0`)
-		require.Contains(t, result.Rows[0], `"modifiedCount": 0`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"matchedCount": 0`)
+		require.Contains(t, row, `"modifiedCount": 0`)
 	})
 }
 
@@ -271,12 +285,13 @@ func TestUpdateManyUpsert(t *testing.T) {
 		{ upsert: true }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"upsertedId"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"upsertedId"`)
 
 		// Verify upserted document
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ status: "pending" })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, verifyResult.RowCount)
+		require.Equal(t, 1, len(verifyResult.Value))
 	})
 }
 
@@ -298,14 +313,16 @@ func TestReplaceOneBasic(t *testing.T) {
 		{ name: "alice", age: 31, country: "USA" }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"matchedCount": 1`)
-		require.Contains(t, result.Rows[0], `"modifiedCount": 1`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"matchedCount": 1`)
+		require.Contains(t, row, `"modifiedCount": 1`)
 
 		// Verify - city should be gone, country should exist
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ name: "alice" })`)
 		require.NoError(t, err)
-		require.Contains(t, verifyResult.Rows[0], `"country": "USA"`)
-		require.NotContains(t, verifyResult.Rows[0], `"city"`)
+		verifyRow := valueToJSON(verifyResult.Value[0])
+		require.Contains(t, verifyRow, `"country": "USA"`)
+		require.NotContains(t, verifyRow, `"city"`)
 	})
 }
 
@@ -323,7 +340,8 @@ func TestReplaceOneUpsert(t *testing.T) {
 		{ upsert: true }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"upsertedId"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"upsertedId"`)
 	})
 }
 
@@ -346,13 +364,16 @@ func TestDeleteOneBasic(t *testing.T) {
 		// Delete one
 		result, err := gc.Execute(ctx, dbName, `db.users.deleteOne({ name: "bob" })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"acknowledged": true`)
-		require.Contains(t, result.Rows[0], `"deletedCount": 1`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"acknowledged": true`)
+		require.Contains(t, row, `"deletedCount": 1`)
 
 		// Verify
 		countResult, err := gc.Execute(ctx, dbName, `db.users.countDocuments()`)
 		require.NoError(t, err)
-		require.Equal(t, "2", countResult.Rows[0])
+		count, ok := countResult.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -366,7 +387,8 @@ func TestDeleteOneNoMatch(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.deleteOne({ name: "nobody" })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"deletedCount": 0`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"deletedCount": 0`)
 	})
 }
 
@@ -389,12 +411,15 @@ func TestDeleteManyBasic(t *testing.T) {
 		// Delete all inactive
 		result, err := gc.Execute(ctx, dbName, `db.users.deleteMany({ status: "inactive" })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"deletedCount": 2`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"deletedCount": 2`)
 
 		// Verify only carol remains
 		countResult, err := gc.Execute(ctx, dbName, `db.users.countDocuments()`)
 		require.NoError(t, err)
-		require.Equal(t, "1", countResult.Rows[0])
+		count, ok := countResult.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(1), count)
 	})
 }
 
@@ -416,7 +441,8 @@ func TestDeleteManyAll(t *testing.T) {
 		// Delete all with empty filter
 		result, err := gc.Execute(ctx, dbName, `db.users.deleteMany({})`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"deletedCount": 2`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"deletedCount": 2`)
 	})
 }
 
@@ -437,8 +463,9 @@ func TestFindOneAndUpdateBasic(t *testing.T) {
 		{ $set: { age: 31 } }
 	)`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], `"age": 30`)
+		require.Equal(t, 1, len(result.Value))
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"age": 30`)
 	})
 }
 
@@ -459,7 +486,8 @@ func TestFindOneAndUpdateReturnAfter(t *testing.T) {
 		{ returnDocument: "after" }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"age": 31`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"age": 31`)
 	})
 }
 
@@ -476,7 +504,8 @@ func TestFindOneAndUpdateNoMatch(t *testing.T) {
 		{ $set: { age: 99 } }
 	)`)
 		require.NoError(t, err)
-		require.Equal(t, "null", result.Rows[0])
+		// No document found returns empty slice
+		require.Equal(t, 0, len(result.Value))
 	})
 }
 
@@ -497,7 +526,8 @@ func TestFindOneAndReplaceBasic(t *testing.T) {
 		{ name: "alice", age: 31, country: "USA" }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"city": "NYC"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"city": "NYC"`)
 	})
 }
 
@@ -518,7 +548,8 @@ func TestFindOneAndReplaceReturnAfter(t *testing.T) {
 		{ returnDocument: "after" }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"age": 31`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"age": 31`)
 	})
 }
 
@@ -539,13 +570,16 @@ func TestFindOneAndDeleteBasic(t *testing.T) {
 		// Returns the deleted document
 		result, err := gc.Execute(ctx, dbName, `db.users.findOneAndDelete({ name: "alice" })`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"alice"`)
-		require.Contains(t, result.Rows[0], `"age": 30`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"alice"`)
+		require.Contains(t, row, `"age": 30`)
 
 		// Verify alice is deleted
 		countResult, err := gc.Execute(ctx, dbName, `db.users.countDocuments()`)
 		require.NoError(t, err)
-		require.Equal(t, "1", countResult.Rows[0])
+		count, ok := countResult.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(1), count)
 	})
 }
 
@@ -559,7 +593,8 @@ func TestFindOneAndDeleteNoMatch(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.findOneAndDelete({ name: "nobody" })`)
 		require.NoError(t, err)
-		require.Equal(t, "null", result.Rows[0])
+		// No document found returns empty slice
+		require.Equal(t, 0, len(result.Value))
 	})
 }
 
@@ -583,11 +618,13 @@ func TestFindOneAndDeleteWithSort(t *testing.T) {
 		{ sort: { score: 1 } }
 	)`)
 		require.NoError(t, err)
-		require.Contains(t, result.Rows[0], `"score": 10`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"score": 10`)
 
 		// Verify only score=20 remains
 		verifyResult, err := gc.Execute(ctx, dbName, `db.users.findOne({ name: "alice" })`)
 		require.NoError(t, err)
-		require.Contains(t, verifyResult.Rows[0], `"score": 20`)
+		verifyRow := valueToJSON(verifyResult.Value[0])
+		require.Contains(t, verifyRow, `"score": 20`)
 	})
 }

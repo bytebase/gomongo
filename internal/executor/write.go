@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bytebase/gomongo/internal/translator"
+	"github.com/bytebase/gomongo/types"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -114,19 +115,14 @@ func executeInsertOne(ctx context.Context, client *mongo.Client, database string
 	}
 
 	// Build response document matching mongosh format
-	response := bson.M{
-		"acknowledged": true,
-		"insertedId":   result.InsertedID,
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "insertedId", Value: result.InsertedID},
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpInsertOne,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -157,19 +153,14 @@ func executeInsertMany(ctx context.Context, client *mongo.Client, database strin
 	}
 
 	// Build response document matching mongosh format
-	response := bson.M{
-		"acknowledged": true,
-		"insertedIds":  result.InsertedIDs,
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "insertedIds", Value: result.InsertedIDs},
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpInsertMany,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -209,23 +200,18 @@ func executeUpdateOne(ctx context.Context, client *mongo.Client, database string
 	}
 
 	// Build response document matching mongosh format
-	response := bson.M{
-		"acknowledged":  true,
-		"matchedCount":  result.MatchedCount,
-		"modifiedCount": result.ModifiedCount,
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "matchedCount", Value: result.MatchedCount},
+		{Key: "modifiedCount", Value: result.ModifiedCount},
 	}
 	if result.UpsertedID != nil {
-		response["upsertedId"] = result.UpsertedID
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+		response = append(response, bson.E{Key: "upsertedId", Value: result.UpsertedID})
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpUpdateOne,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -261,23 +247,18 @@ func executeUpdateMany(ctx context.Context, client *mongo.Client, database strin
 		return nil, fmt.Errorf("updateMany failed: %w", err)
 	}
 
-	response := bson.M{
-		"acknowledged":  true,
-		"matchedCount":  result.MatchedCount,
-		"modifiedCount": result.ModifiedCount,
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "matchedCount", Value: result.MatchedCount},
+		{Key: "modifiedCount", Value: result.ModifiedCount},
 	}
 	if result.UpsertedID != nil {
-		response["upsertedId"] = result.UpsertedID
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+		response = append(response, bson.E{Key: "upsertedId", Value: result.UpsertedID})
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpUpdateMany,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -313,23 +294,18 @@ func executeReplaceOne(ctx context.Context, client *mongo.Client, database strin
 		return nil, fmt.Errorf("replaceOne failed: %w", err)
 	}
 
-	response := bson.M{
-		"acknowledged":  true,
-		"matchedCount":  result.MatchedCount,
-		"modifiedCount": result.ModifiedCount,
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "matchedCount", Value: result.MatchedCount},
+		{Key: "modifiedCount", Value: result.ModifiedCount},
 	}
 	if result.UpsertedID != nil {
-		response["upsertedId"] = result.UpsertedID
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+		response = append(response, bson.E{Key: "upsertedId", Value: result.UpsertedID})
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpReplaceOne,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -356,19 +332,14 @@ func executeDeleteOne(ctx context.Context, client *mongo.Client, database string
 		return nil, fmt.Errorf("deleteOne failed: %w", err)
 	}
 
-	response := bson.M{
-		"acknowledged": true,
-		"deletedCount": result.DeletedCount,
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "deletedCount", Value: result.DeletedCount},
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpDeleteOne,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -395,19 +366,14 @@ func executeDeleteMany(ctx context.Context, client *mongo.Client, database strin
 		return nil, fmt.Errorf("deleteMany failed: %w", err)
 	}
 
-	response := bson.M{
-		"acknowledged": true,
-		"deletedCount": result.DeletedCount,
-	}
-
-	jsonBytes, err := bson.MarshalExtJSONIndent(response, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
+	response := bson.D{
+		{Key: "acknowledged", Value: true},
+		{Key: "deletedCount", Value: result.DeletedCount},
 	}
 
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpDeleteMany,
+		Value:     []any{response},
 	}, nil
 }
 
@@ -447,26 +413,21 @@ func executeFindOneAndUpdate(ctx context.Context, client *mongo.Client, database
 		opts.SetComment(op.Comment)
 	}
 
-	var doc bson.M
+	var doc bson.D
 	err := collection.FindOneAndUpdate(ctx, op.Filter, op.Update, opts).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return &Result{
-				Rows:     []string{"null"},
-				RowCount: 1,
+				Operation: types.OpFindOneAndUpdate,
+				Value:     []any{},
 			}, nil
 		}
 		return nil, fmt.Errorf("findOneAndUpdate failed: %w", err)
 	}
 
-	jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
-
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpFindOneAndUpdate,
+		Value:     []any{doc},
 	}, nil
 }
 
@@ -503,26 +464,21 @@ func executeFindOneAndReplace(ctx context.Context, client *mongo.Client, databas
 		opts.SetComment(op.Comment)
 	}
 
-	var doc bson.M
+	var doc bson.D
 	err := collection.FindOneAndReplace(ctx, op.Filter, op.Replacement, opts).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return &Result{
-				Rows:     []string{"null"},
-				RowCount: 1,
+				Operation: types.OpFindOneAndReplace,
+				Value:     []any{},
 			}, nil
 		}
 		return nil, fmt.Errorf("findOneAndReplace failed: %w", err)
 	}
 
-	jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
-
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpFindOneAndReplace,
+		Value:     []any{doc},
 	}, nil
 }
 
@@ -550,25 +506,20 @@ func executeFindOneAndDelete(ctx context.Context, client *mongo.Client, database
 		opts.SetComment(op.Comment)
 	}
 
-	var doc bson.M
+	var doc bson.D
 	err := collection.FindOneAndDelete(ctx, op.Filter, opts).Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return &Result{
-				Rows:     []string{"null"},
-				RowCount: 1,
+				Operation: types.OpFindOneAndDelete,
+				Value:     []any{},
 			}, nil
 		}
 		return nil, fmt.Errorf("findOneAndDelete failed: %w", err)
 	}
 
-	jsonBytes, err := bson.MarshalExtJSONIndent(doc, false, false, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal failed: %w", err)
-	}
-
 	return &Result{
-		Rows:     []string{string(jsonBytes)},
-		RowCount: 1,
+		Operation: types.OpFindOneAndDelete,
+		Value:     []any{doc},
 	}, nil
 }

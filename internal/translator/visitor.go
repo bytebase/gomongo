@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
+	"github.com/bytebase/gomongo/types"
 	"github.com/bytebase/parser/mongodb"
 )
 
@@ -16,7 +17,7 @@ type visitor struct {
 
 func newVisitor() *visitor {
 	return &visitor{
-		operation: &Operation{OpType: OpUnknown},
+		operation: &Operation{OpType: types.OpUnknown},
 	}
 }
 
@@ -56,24 +57,24 @@ func (v *visitor) visitDbStatement(ctx mongodb.IDbStatementContext) {
 	case *mongodb.CollectionOperationContext:
 		v.visitCollectionOperation(c)
 	case *mongodb.GetCollectionNamesContext:
-		v.operation.OpType = OpGetCollectionNames
+		v.operation.OpType = types.OpGetCollectionNames
 	case *mongodb.GetCollectionInfosContext:
-		v.operation.OpType = OpGetCollectionInfos
+		v.operation.OpType = types.OpGetCollectionInfos
 		v.extractGetCollectionInfosArgs(c)
 	case *mongodb.CreateCollectionContext:
-		v.operation.OpType = OpCreateCollection
+		v.operation.OpType = types.OpCreateCollection
 		v.extractCreateCollectionArgs(c)
 	case *mongodb.DropDatabaseContext:
-		v.operation.OpType = OpDropDatabase
+		v.operation.OpType = types.OpDropDatabase
 	}
 }
 
 func (v *visitor) visitShellCommand(ctx mongodb.IShellCommandContext) {
 	switch ctx.(type) {
 	case *mongodb.ShowDatabasesContext:
-		v.operation.OpType = OpShowDatabases
+		v.operation.OpType = types.OpShowDatabases
 	case *mongodb.ShowCollectionsContext:
-		v.operation.OpType = OpShowCollections
+		v.operation.OpType = types.OpShowCollections
 	default:
 		v.err = &UnsupportedOperationError{
 			Operation: ctx.GetText(),
@@ -95,12 +96,12 @@ func (v *visitor) visitCollectionOperation(ctx *mongodb.CollectionOperationConte
 }
 
 func (v *visitor) VisitGetCollectionNames(_ *mongodb.GetCollectionNamesContext) any {
-	v.operation.OpType = OpGetCollectionNames
+	v.operation.OpType = types.OpGetCollectionNames
 	return nil
 }
 
 func (v *visitor) VisitGetCollectionInfos(ctx *mongodb.GetCollectionInfosContext) any {
-	v.operation.OpType = OpGetCollectionInfos
+	v.operation.OpType = types.OpGetCollectionInfos
 	v.extractGetCollectionInfosArgs(ctx)
 	return nil
 }
@@ -138,7 +139,7 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 
 	// Determine method context for registry lookup
 	getMethodContext := func() string {
-		if v.operation.OpType == OpFind || v.operation.OpType == OpFindOne {
+		if v.operation.OpType == types.OpFind || v.operation.OpType == types.OpFindOne {
 			return "cursor"
 		}
 		return "collection"
@@ -147,25 +148,25 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	switch {
 	// Supported read operations
 	case mc.FindMethod() != nil:
-		v.operation.OpType = OpFind
+		v.operation.OpType = types.OpFind
 		v.extractFindArgs(mc.FindMethod())
 	case mc.FindOneMethod() != nil:
-		v.operation.OpType = OpFindOne
+		v.operation.OpType = types.OpFindOne
 		v.extractFindOneArgs(mc.FindOneMethod())
 	case mc.CountDocumentsMethod() != nil:
-		v.operation.OpType = OpCountDocuments
+		v.operation.OpType = types.OpCountDocuments
 		v.extractCountDocumentsArgsFromMethod(mc.CountDocumentsMethod())
 	case mc.EstimatedDocumentCountMethod() != nil:
-		v.operation.OpType = OpEstimatedDocumentCount
+		v.operation.OpType = types.OpEstimatedDocumentCount
 		v.extractEstimatedDocumentCountArgs(mc.EstimatedDocumentCountMethod())
 	case mc.DistinctMethod() != nil:
-		v.operation.OpType = OpDistinct
+		v.operation.OpType = types.OpDistinct
 		v.extractDistinctArgsFromMethod(mc.DistinctMethod())
 	case mc.AggregateMethod() != nil:
-		v.operation.OpType = OpAggregate
+		v.operation.OpType = types.OpAggregate
 		v.extractAggregationPipelineFromMethod(mc.AggregateMethod())
 	case mc.GetIndexesMethod() != nil:
-		v.operation.OpType = OpGetIndexes
+		v.operation.OpType = types.OpGetIndexes
 
 	// Supported cursor modifiers
 	case mc.SortMethod() != nil:
@@ -185,57 +186,57 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 
 	// Supported M2 write operations
 	case mc.InsertOneMethod() != nil:
-		v.operation.OpType = OpInsertOne
+		v.operation.OpType = types.OpInsertOne
 		v.extractInsertOneArgs(mc.InsertOneMethod())
 
 	case mc.InsertManyMethod() != nil:
-		v.operation.OpType = OpInsertMany
+		v.operation.OpType = types.OpInsertMany
 		v.extractInsertManyArgs(mc.InsertManyMethod())
 
 	// Supported M2 write operations - updateOne
 	case mc.UpdateOneMethod() != nil:
-		v.operation.OpType = OpUpdateOne
+		v.operation.OpType = types.OpUpdateOne
 		v.extractUpdateOneArgs(mc.UpdateOneMethod())
 	case mc.UpdateManyMethod() != nil:
-		v.operation.OpType = OpUpdateMany
+		v.operation.OpType = types.OpUpdateMany
 		v.extractUpdateManyArgs(mc.UpdateManyMethod())
 	case mc.DeleteOneMethod() != nil:
-		v.operation.OpType = OpDeleteOne
+		v.operation.OpType = types.OpDeleteOne
 		v.extractDeleteOneArgs(mc.DeleteOneMethod())
 	case mc.DeleteManyMethod() != nil:
-		v.operation.OpType = OpDeleteMany
+		v.operation.OpType = types.OpDeleteMany
 		v.extractDeleteManyArgs(mc.DeleteManyMethod())
 	case mc.ReplaceOneMethod() != nil:
-		v.operation.OpType = OpReplaceOne
+		v.operation.OpType = types.OpReplaceOne
 		v.extractReplaceOneArgs(mc.ReplaceOneMethod())
 	case mc.FindOneAndUpdateMethod() != nil:
-		v.operation.OpType = OpFindOneAndUpdate
+		v.operation.OpType = types.OpFindOneAndUpdate
 		v.extractFindOneAndUpdateArgs(mc.FindOneAndUpdateMethod())
 	case mc.FindOneAndReplaceMethod() != nil:
-		v.operation.OpType = OpFindOneAndReplace
+		v.operation.OpType = types.OpFindOneAndReplace
 		v.extractFindOneAndReplaceArgs(mc.FindOneAndReplaceMethod())
 	case mc.FindOneAndDeleteMethod() != nil:
-		v.operation.OpType = OpFindOneAndDelete
+		v.operation.OpType = types.OpFindOneAndDelete
 		v.extractFindOneAndDeleteArgs(mc.FindOneAndDeleteMethod())
 
 	// Supported M3 index operations
 	case mc.CreateIndexMethod() != nil:
-		v.operation.OpType = OpCreateIndex
+		v.operation.OpType = types.OpCreateIndex
 		v.extractCreateIndexArgs(mc.CreateIndexMethod())
 	case mc.CreateIndexesMethod() != nil:
 		v.handleUnsupportedMethod("collection", "createIndexes") // Lower ROI, keep as planned
 	case mc.DropIndexMethod() != nil:
-		v.operation.OpType = OpDropIndex
+		v.operation.OpType = types.OpDropIndex
 		v.extractDropIndexArgs(mc.DropIndexMethod())
 	case mc.DropIndexesMethod() != nil:
-		v.operation.OpType = OpDropIndexes
+		v.operation.OpType = types.OpDropIndexes
 		v.extractDropIndexesArgs(mc.DropIndexesMethod())
 
 	// Supported M3 collection management
 	case mc.DropMethod() != nil:
-		v.operation.OpType = OpDrop
+		v.operation.OpType = types.OpDrop
 	case mc.RenameCollectionMethod() != nil:
-		v.operation.OpType = OpRenameCollection
+		v.operation.OpType = types.OpRenameCollection
 		v.extractRenameCollectionArgs(mc.RenameCollectionMethod())
 
 	// Planned M3 stats operations - return PlannedOperationError for fallback

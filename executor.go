@@ -39,8 +39,7 @@ func execute(ctx context.Context, client *mongo.Client, database, statement stri
 	}
 
 	return &Result{
-		Rows:      result.Rows,
-		RowCount:  result.RowCount,
-		Statement: result.Statement,
+		Operation: result.Operation,
+		Value:     result.Value,
 	}, nil
 }

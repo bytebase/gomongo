@@ -5,75 +5,75 @@ import (
 	"fmt"
 
 	"github.com/bytebase/gomongo/internal/translator"
+	"github.com/bytebase/gomongo/types"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // Result represents query execution results.
 type Result struct {
-	Rows      []string
-	RowCount  int
-	Statement string
+	Operation types.OperationType
+	Value     []any // slice of results; element types vary by operation
 }
 
 // Execute executes a parsed operation against MongoDB.
 func Execute(ctx context.Context, client *mongo.Client, database string, op *translator.Operation, statement string, maxRows *int64) (*Result, error) {
 	switch op.OpType {
-	case translator.OpFind:
+	case types.OpFind:
 		return executeFind(ctx, client, database, op, maxRows)
-	case translator.OpFindOne:
+	case types.OpFindOne:
 		return executeFindOne(ctx, client, database, op)
-	case translator.OpAggregate:
+	case types.OpAggregate:
 		return executeAggregate(ctx, client, database, op)
-	case translator.OpShowDatabases:
+	case types.OpShowDatabases:
 		return executeShowDatabases(ctx, client)
-	case translator.OpShowCollections:
+	case types.OpShowCollections:
 		return executeShowCollections(ctx, client, database)
-	case translator.OpGetCollectionNames:
+	case types.OpGetCollectionNames:
 		return executeGetCollectionNames(ctx, client, database)
-	case translator.OpGetCollectionInfos:
+	case types.OpGetCollectionInfos:
 		return executeGetCollectionInfos(ctx, client, database, op)
-	case translator.OpGetIndexes:
+	case types.OpGetIndexes:
 		return executeGetIndexes(ctx, client, database, op)
-	case translator.OpCountDocuments:
+	case types.OpCountDocuments:
 		return executeCountDocuments(ctx, client, database, op, maxRows)
-	case translator.OpEstimatedDocumentCount:
+	case types.OpEstimatedDocumentCount:
 		return executeEstimatedDocumentCount(ctx, client, database, op)
-	case translator.OpDistinct:
+	case types.OpDistinct:
 		return executeDistinct(ctx, client, database, op)
-	case translator.OpInsertOne:
+	case types.OpInsertOne:
 		return executeInsertOne(ctx, client, database, op)
-	case translator.OpInsertMany:
+	case types.OpInsertMany:
 		return executeInsertMany(ctx, client, database, op)
-	case translator.OpUpdateOne:
+	case types.OpUpdateOne:
 		return executeUpdateOne(ctx, client, database, op)
-	case translator.OpUpdateMany:
+	case types.OpUpdateMany:
 		return executeUpdateMany(ctx, client, database, op)
-	case translator.OpReplaceOne:
+	case types.OpReplaceOne:
 		return executeReplaceOne(ctx, client, database, op)
-	case translator.OpDeleteOne:
+	case types.OpDeleteOne:
 		return executeDeleteOne(ctx, client, database, op)
-	case translator.OpDeleteMany:
+	case types.OpDeleteMany:
 		return executeDeleteMany(ctx, client, database, op)
-	case translator.OpFindOneAndUpdate:
+	case types.OpFindOneAndUpdate:
 		return executeFindOneAndUpdate(ctx, client, database, op)
-	case translator.OpFindOneAndReplace:
+	case types.OpFindOneAndReplace:
 		return executeFindOneAndReplace(ctx, client, database, op)
-	case translator.OpFindOneAndDelete:
+	case types.OpFindOneAndDelete:
 		return executeFindOneAndDelete(ctx, client, database, op)
 	// M3: Administrative Operations
-	case translator.OpCreateIndex:
+	case types.OpCreateIndex:
 		return executeCreateIndex(ctx, client, database, op)
-	case translator.OpDropIndex:
+	case types.OpDropIndex:
 		return executeDropIndex(ctx, client, database, op)
-	case translator.OpDropIndexes:
+	case types.OpDropIndexes:
 		return executeDropIndexes(ctx, client, database, op)
-	case translator.OpDrop:
+	case types.OpDrop:
 		return executeDrop(ctx, client, database, op)
-	case translator.OpCreateCollection:
+	case types.OpCreateCollection:
 		return executeCreateCollection(ctx, client, database, op)
-	case translator.OpDropDatabase:
+	case types.OpDropDatabase:
 		return executeDropDatabase(ctx, client, database)
-	case translator.OpRenameCollection:
+	case types.OpRenameCollection:
 		return executeRenameCollection(ctx, client, database, op)
 	default:
 		return nil, fmt.Errorf("unsupported operation: %s", statement)

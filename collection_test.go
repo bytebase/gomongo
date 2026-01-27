@@ -14,6 +14,24 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+// valueToJSON converts a result value to a JSON string for assertion.
+func valueToJSON(v any) string {
+	bytes, err := bson.MarshalExtJSONIndent(v, false, false, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return string(bytes)
+}
+
+// valuesToStrings converts result values to JSON strings.
+func valuesToStrings(values []any) []string {
+	result := make([]string, len(values))
+	for i, v := range values {
+		result[i] = valueToJSON(v)
+	}
+	return result
+}
+
 func TestFindEmptyCollection(t *testing.T) {
 	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
 		dbName := fmt.Sprintf("testdb_find_empty_%s", db.Name)
@@ -25,8 +43,8 @@ func TestFindEmptyCollection(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.find()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 0, result.RowCount)
-		require.Empty(t, result.Rows)
+		require.Equal(t, 0, len(result.Value))
+		require.Empty(t, result.Value)
 	})
 }
 
@@ -49,11 +67,12 @@ func TestFindWithDocuments(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.find()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount)
-		require.Len(t, result.Rows, 2)
+		require.Equal(t, 2, len(result.Value))
+		require.Len(t, result.Value, 2)
 
 		// Verify JSON format
-		for _, row := range result.Rows {
+		rows := valuesToStrings(result.Value)
+		for _, row := range rows {
 			require.Contains(t, row, "name")
 			require.Contains(t, row, "age")
 			require.Contains(t, row, "_id")
@@ -76,7 +95,7 @@ func TestFindWithEmptyFilter(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.items.find({})")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
 	})
 }
 
@@ -91,8 +110,8 @@ func TestFindOneEmptyCollection(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.findOne()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 0, result.RowCount)
-		require.Empty(t, result.Rows)
+		require.Equal(t, 0, len(result.Value))
+		require.Empty(t, result.Value)
 	})
 }
 
@@ -114,11 +133,12 @@ func TestFindOneWithDocuments(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.findOne()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Len(t, result.Rows, 1)
-		require.Contains(t, result.Rows[0], "name")
-		require.Contains(t, result.Rows[0], "age")
-		require.Contains(t, result.Rows[0], "_id")
+		require.Equal(t, 1, len(result.Value))
+		require.Len(t, result.Value, 1)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, "name")
+		require.Contains(t, row, "age")
+		require.Contains(t, row, "_id")
 	})
 }
 
@@ -183,12 +203,12 @@ func TestFindOneWithFilter(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				if tc.expectMatch {
-					require.Equal(t, 1, result.RowCount)
+					require.Equal(t, 1, len(result.Value))
 					if tc.checkResult != nil {
-						tc.checkResult(t, result.Rows[0])
+						tc.checkResult(t, valueToJSON(result.Value[0]))
 					}
 				} else {
-					require.Equal(t, 0, result.RowCount)
+					require.Equal(t, 0, len(result.Value))
 				}
 			})
 		}
@@ -254,8 +274,8 @@ func TestFindOneWithOptions(t *testing.T) {
 				result, err := gc.Execute(ctx, dbName, tc.statement)
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.Equal(t, 1, result.RowCount)
-				tc.checkResult(t, result.Rows[0])
+				require.Equal(t, 1, len(result.Value))
+				tc.checkResult(t, valueToJSON(result.Value[0]))
 			})
 		}
 	})
@@ -340,9 +360,9 @@ func TestFindWithFilter(t *testing.T) {
 				result, err := gc.Execute(ctx, dbName, tc.statement)
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.Equal(t, tc.expectedCount, result.RowCount)
-				if tc.checkResult != nil && result.RowCount > 0 {
-					tc.checkResult(t, result.Rows)
+				require.Equal(t, tc.expectedCount, len(result.Value))
+				if tc.checkResult != nil && len(result.Value) > 0 {
+					tc.checkResult(t, valuesToStrings(result.Value))
 				}
 			})
 		}
@@ -480,9 +500,9 @@ func TestFindWithCursorModifications(t *testing.T) {
 				result, err := gc.Execute(ctx, dbName, tc.statement)
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.Equal(t, tc.expectedCount, result.RowCount)
-				if tc.checkResult != nil && result.RowCount > 0 {
-					tc.checkResult(t, result.Rows)
+				require.Equal(t, tc.expectedCount, len(result.Value))
+				if tc.checkResult != nil && len(result.Value) > 0 {
+					tc.checkResult(t, valuesToStrings(result.Value))
 				}
 			})
 		}
@@ -509,10 +529,11 @@ func TestFindWithProjectionArg(t *testing.T) {
 		// find with projection as 2nd argument
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}, { name: 1, _id: 0 })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
 		// Verify only 'name' field is returned
-		for _, row := range result.Rows {
+		rows := valuesToStrings(result.Value)
+		for _, row := range rows {
 			require.Contains(t, row, "name")
 			require.NotContains(t, row, "age")
 			require.NotContains(t, row, "city")
@@ -545,7 +566,7 @@ func TestFindWithHintOption(t *testing.T) {
 		// find with hint option (index name)
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}, {}, { hint: "name_1" })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -583,7 +604,7 @@ func TestFindWithMaxMinOptions(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.items.find({}, {}, { hint: { price: 1 }, min: { price: 20 }, max: { price: 40 } })`)
 		require.NoError(t, err)
 		// Should return items with price 20 and 30 (max is exclusive)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -606,7 +627,7 @@ func TestFindWithMaxTimeMSOption(t *testing.T) {
 		// find with maxTimeMS option
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}, {}, { maxTimeMS: 5000 })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -629,9 +650,10 @@ func TestFindOneWithProjectionAndOptions(t *testing.T) {
 		// findOne with projection as 2nd argument
 		result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, { name: 1, _id: 0 })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "name")
-		require.NotContains(t, result.Rows[0], "age")
+		require.Equal(t, 1, len(result.Value))
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, "name")
+		require.NotContains(t, row, "age")
 	})
 }
 
@@ -660,7 +682,7 @@ func TestFindOneWithHintOption(t *testing.T) {
 		// findOne with hint option (index name)
 		result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, {}, { hint: "name_1" })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
 	})
 }
 
@@ -683,7 +705,7 @@ func TestFindOneWithMaxTimeMSOption(t *testing.T) {
 		// findOne with maxTimeMS option
 		result, err := gc.Execute(ctx, dbName, `db.users.findOne({}, {}, { maxTimeMS: 5000 })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
 	})
 }
 
@@ -797,9 +819,9 @@ func TestAggregateBasic(t *testing.T) {
 				result, err := gc.Execute(ctx, dbName, tc.statement)
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.Equal(t, tc.expectedCount, result.RowCount)
-				if tc.checkResult != nil && result.RowCount > 0 {
-					tc.checkResult(t, result.Rows)
+				require.Equal(t, tc.expectedCount, len(result.Value))
+				if tc.checkResult != nil && len(result.Value) > 0 {
+					tc.checkResult(t, valuesToStrings(result.Value))
 				}
 			})
 		}
@@ -877,9 +899,9 @@ func TestAggregateGroup(t *testing.T) {
 				result, err := gc.Execute(ctx, dbName, tc.statement)
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				require.Equal(t, tc.expectedCount, result.RowCount)
-				if tc.checkResult != nil && result.RowCount > 0 {
-					tc.checkResult(t, result.Rows)
+				require.Equal(t, tc.expectedCount, len(result.Value))
+				if tc.checkResult != nil && len(result.Value) > 0 {
+					tc.checkResult(t, valuesToStrings(result.Value))
 				}
 			})
 		}
@@ -997,19 +1019,20 @@ func TestAggregateFilteredSubset(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, statement)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 3, result.RowCount)
+		require.Equal(t, 3, len(result.Value))
 
+		rows := valuesToStrings(result.Value)
 		// Carl (1998) should be first (youngest)
-		require.Contains(t, result.Rows[0], `"Carl"`)
+		require.Contains(t, rows[0], `"Carl"`)
 		// Olive (1985) should be second
-		require.Contains(t, result.Rows[1], `"Olive"`)
+		require.Contains(t, rows[1], `"Olive"`)
 		// Elise (1972) should be third
-		require.Contains(t, result.Rows[2], `"Elise"`)
+		require.Contains(t, rows[2], `"Elise"`)
 
 		// Verify _id, vocation, and address are excluded
-		require.NotContains(t, result.Rows[0], `"_id"`)
-		require.NotContains(t, result.Rows[0], `"vocation"`)
-		require.NotContains(t, result.Rows[0], `"address"`)
+		require.NotContains(t, rows[0], `"_id"`)
+		require.NotContains(t, rows[0], `"vocation"`)
+		require.NotContains(t, rows[0], `"address"`)
 	})
 }
 
@@ -1097,16 +1120,17 @@ func TestAggregateGroupAndTotal(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, statement)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 3, result.RowCount)
+		require.Equal(t, 3, len(result.Value))
 
+		rows := valuesToStrings(result.Value)
 		// oranieri should be first (earliest order in 2020: Jan 1)
-		require.Contains(t, result.Rows[0], `"oranieri@warmmail.com"`)
+		require.Contains(t, rows[0], `"oranieri@warmmail.com"`)
 
 		// Verify structure
-		require.Contains(t, result.Rows[0], `"customer_id"`)
-		require.Contains(t, result.Rows[0], `"total_value"`)
-		require.Contains(t, result.Rows[0], `"total_orders"`)
-		require.NotContains(t, result.Rows[0], `"_id"`)
+		require.Contains(t, rows[0], `"customer_id"`)
+		require.Contains(t, rows[0], `"total_value"`)
+		require.Contains(t, rows[0], `"total_orders"`)
+		require.NotContains(t, rows[0], `"_id"`)
 	})
 }
 
@@ -1172,13 +1196,14 @@ func TestAggregateUnwindArrays(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		// Should have: abc12345 (2x), def45678 (3x but all > 15), pqr88223 (1x), xyz11228 (1x)
-		require.Equal(t, 4, result.RowCount)
+		require.Equal(t, 4, len(result.Value))
 
+		rows := valuesToStrings(result.Value)
 		// Verify structure
-		require.Contains(t, result.Rows[0], `"product_id"`)
-		require.Contains(t, result.Rows[0], `"product"`)
-		require.Contains(t, result.Rows[0], `"total_value"`)
-		require.Contains(t, result.Rows[0], `"quantity"`)
+		require.Contains(t, rows[0], `"product_id"`)
+		require.Contains(t, rows[0], `"product"`)
+		require.Contains(t, rows[0], `"total_value"`)
+		require.Contains(t, rows[0], `"quantity"`)
 	})
 }
 
@@ -1278,13 +1303,14 @@ func TestAggregateOneToOneJoin(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, statement)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 3, result.RowCount) // Only 2020 orders: elise, oranieri, jjones
+		require.Equal(t, 3, len(result.Value)) // Only 2020 orders: elise, oranieri, jjones
 
+		rows := valuesToStrings(result.Value)
 		// Verify joined fields exist
-		require.Contains(t, result.Rows[0], `"product_name"`)
-		require.Contains(t, result.Rows[0], `"product_category"`)
-		require.NotContains(t, result.Rows[0], `"_id"`)
-		require.NotContains(t, result.Rows[0], `"product_mapping"`)
+		require.Contains(t, rows[0], `"product_name"`)
+		require.Contains(t, rows[0], `"product_category"`)
+		require.NotContains(t, rows[0], `"_id"`)
+		require.NotContains(t, rows[0], `"product_mapping"`)
 	})
 }
 
@@ -1412,13 +1438,14 @@ func TestAggregateMultiFieldJoin(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		// Should have: Asus Laptop Normal Display (2 orders), Morphy Richards (1 order)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
+		rows := valuesToStrings(result.Value)
 		// Verify structure
-		require.Contains(t, result.Rows[0], `"orders"`)
-		require.Contains(t, result.Rows[0], `"name"`)
-		require.Contains(t, result.Rows[0], `"variation"`)
-		require.NotContains(t, result.Rows[0], `"_id"`)
+		require.Contains(t, rows[0], `"orders"`)
+		require.Contains(t, rows[0], `"name"`)
+		require.Contains(t, rows[0], `"variation"`)
+		require.NotContains(t, rows[0], `"_id"`)
 	})
 }
 
@@ -1441,7 +1468,7 @@ func TestAggregateWithOptions(t *testing.T) {
 		// aggregate with maxTimeMS option
 		result, err := gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { maxTimeMS: 5000 })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -1470,12 +1497,12 @@ func TestAggregateWithHintOption(t *testing.T) {
 		// aggregate with hint option (index name)
 		result, err := gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: "age_1" })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
 		// aggregate with hint option (index spec)
 		result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { age: { $gt: 20 } } }], { hint: { age: 1 } })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -1512,11 +1539,12 @@ func TestGetIndexes(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.getIndexes()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.GreaterOrEqual(t, result.RowCount, 1)
+		require.GreaterOrEqual(t, len(result.Value), 1)
 
 		// Verify the _id index exists
 		found := false
-		for _, row := range result.Rows {
+		rows := valuesToStrings(result.Value)
+		for _, row := range rows {
 			if strings.Contains(row, `"name": "_id_"`) {
 				found = true
 				break
@@ -1549,12 +1577,13 @@ func TestGetIndexesWithCustomIndex(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.getIndexes()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount) // _id index + email index
+		require.Equal(t, 2, len(result.Value)) // _id index + email index
 
 		// Verify both indexes exist
 		hasIdIndex := false
 		hasEmailIndex := false
-		for _, row := range result.Rows {
+		rows := valuesToStrings(result.Value)
+		for _, row := range rows {
 			if strings.Contains(row, `"name": "_id_"`) {
 				hasIdIndex = true
 			}
@@ -1585,10 +1614,11 @@ func TestGetIndexesBracketNotation(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db["user-logs"].getIndexes()`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.GreaterOrEqual(t, result.RowCount, 1)
+		require.GreaterOrEqual(t, len(result.Value), 1)
 
 		// Verify the _id index exists
-		require.Contains(t, result.Rows[0], `"name": "_id_"`)
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"name": "_id_"`)
 	})
 }
 
@@ -1614,8 +1644,10 @@ func TestCountDocuments(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.countDocuments()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Equal(t, "3", result.Rows[0])
+		require.Equal(t, 1, len(result.Value))
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(3), count)
 	})
 }
 
@@ -1642,13 +1674,17 @@ func TestCountDocumentsWithFilter(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" })`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Equal(t, "3", result.Rows[0])
+		require.Equal(t, 1, len(result.Value))
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(3), count)
 
 		// Test with comparison operator
 		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({ age: { $gte: 30 } })`)
 		require.NoError(t, err)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok = result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1665,8 +1701,10 @@ func TestCountDocumentsEmptyCollection(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.countDocuments()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Equal(t, "0", result.Rows[0])
+		require.Equal(t, 1, len(result.Value))
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(0), count)
 	})
 }
 
@@ -1691,7 +1729,9 @@ func TestCountDocumentsWithEmptyFilter(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.items.countDocuments({})")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1718,17 +1758,23 @@ func TestCountDocumentsWithOptions(t *testing.T) {
 		// Test with limit option
 		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({}, { limit: 3 })`)
 		require.NoError(t, err)
-		require.Equal(t, "3", result.Rows[0])
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(3), count)
 
 		// Test with skip option
 		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({}, { skip: 2 })`)
 		require.NoError(t, err)
-		require.Equal(t, "3", result.Rows[0])
+		count, ok = result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(3), count)
 
 		// Test with both limit and skip
 		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({}, { skip: 1, limit: 2 })`)
 		require.NoError(t, err)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok = result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1759,12 +1805,16 @@ func TestCountDocumentsWithHint(t *testing.T) {
 		// Test with hint using index name
 		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" }, { hint: "status_1" })`)
 		require.NoError(t, err)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 
 		// Test with hint using index specification document
 		result, err = gc.Execute(ctx, dbName, `db.users.countDocuments({ status: "active" }, { hint: { status: 1 } })`)
 		require.NoError(t, err)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok = result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1786,7 +1836,9 @@ func TestCountDocumentsMaxTimeMS(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.countDocuments({}, { maxTimeMS: 5000 })`)
 		require.NoError(t, err)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1812,8 +1864,10 @@ func TestEstimatedDocumentCount(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.estimatedDocumentCount()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Equal(t, "3", result.Rows[0])
+		require.Equal(t, 1, len(result.Value))
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(3), count)
 	})
 }
 
@@ -1830,8 +1884,10 @@ func TestEstimatedDocumentCountEmptyCollection(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.users.estimatedDocumentCount()")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 1, result.RowCount)
-		require.Equal(t, "0", result.Rows[0])
+		require.Equal(t, 1, len(result.Value))
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(0), count)
 	})
 }
 
@@ -1856,7 +1912,9 @@ func TestEstimatedDocumentCountWithEmptyOptions(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, "db.items.estimatedDocumentCount({})")
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, "2", result.Rows[0])
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1878,8 +1936,10 @@ func TestEstimatedDocumentCountMaxTimeMS(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.estimatedDocumentCount({ maxTimeMS: 5000 })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Equal(t, "2", result.Rows[0])
+		require.Equal(t, 1, len(result.Value))
+		count, ok := result.Value[0].(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(2), count)
 	})
 }
 
@@ -1906,15 +1966,17 @@ func TestDistinct(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.distinct("status")`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
 		// Verify both values are present
 		values := make(map[string]bool)
-		for _, row := range result.Rows {
-			values[row] = true
+		for _, v := range result.Value {
+			if s, ok := v.(string); ok {
+				values[s] = true
+			}
 		}
-		require.True(t, values[`"active"`])
-		require.True(t, values[`"inactive"`])
+		require.True(t, values["active"])
+		require.True(t, values["inactive"])
 	})
 }
 
@@ -1942,17 +2004,19 @@ func TestDistinctWithFilter(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.products.distinct("brand", { category: "electronics" })`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 
 		// Verify only electronics brands are returned
 		values := make(map[string]bool)
-		for _, row := range result.Rows {
-			values[row] = true
+		for _, v := range result.Value {
+			if s, ok := v.(string); ok {
+				values[s] = true
+			}
 		}
-		require.True(t, values[`"Apple"`])
-		require.True(t, values[`"Samsung"`])
-		require.False(t, values[`"Nike"`])
-		require.False(t, values[`"Adidas"`])
+		require.True(t, values["Apple"])
+		require.True(t, values["Samsung"])
+		require.False(t, values["Nike"])
+		require.False(t, values["Adidas"])
 	})
 }
 
@@ -1969,8 +2033,8 @@ func TestDistinctEmptyCollection(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.distinct("status")`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 0, result.RowCount)
-		require.Empty(t, result.Rows)
+		require.Equal(t, 0, len(result.Value))
+		require.Empty(t, result.Value)
 	})
 }
 
@@ -1997,7 +2061,7 @@ func TestDistinctBracketNotation(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db["user-logs"].distinct("level")`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 3, result.RowCount)
+		require.Equal(t, 3, len(result.Value))
 	})
 }
 
@@ -2025,7 +2089,7 @@ func TestDistinctNumericValues(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.scores.distinct("score")`)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 3, result.RowCount) // 100, 85, 90
+		require.Equal(t, 3, len(result.Value)) // 100, 85, 90
 	})
 }
 
@@ -2048,7 +2112,7 @@ func TestDistinctMaxTimeMS(t *testing.T) {
 
 		result, err := gc.Execute(ctx, dbName, `db.users.distinct("city", {}, { maxTimeMS: 5000 })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -2096,7 +2160,7 @@ func TestCursorHintMethod(t *testing.T) {
 		// Use hint() cursor method with string
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint("name_1")`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
+		require.Equal(t, 2, len(result.Value))
 	})
 }
 
@@ -2123,7 +2187,7 @@ func TestCursorHintMethodWithDocument(t *testing.T) {
 		// Use hint() cursor method with document
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ name: 1 })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
+		require.Equal(t, 1, len(result.Value))
 	})
 }
 
@@ -2158,8 +2222,9 @@ func TestCursorMaxMethod(t *testing.T) {
 		// Use max() cursor method - returns documents with age < 30
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).max({ age: 30 })`)
 		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], `"Bob"`)
+		require.Equal(t, 1, len(result.Value))
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"Bob"`)
 	})
 }
 
@@ -2194,344 +2259,6 @@ func TestCursorMinMethod(t *testing.T) {
 		// Use min() cursor method - returns documents with age >= 30
 		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).min({ age: 30 })`)
 		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
-	})
-}
-
-func TestCursorMinMaxCombined(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		// DocumentDB doesn't support min/max cursor methods
-		if db.Name == "documentdb" {
-			t.Skip("DocumentDB doesn't support min/max cursor methods")
-		}
-
-		dbName := fmt.Sprintf("testdb_cursor_minmax_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-
-		gc := gomongo.NewClient(db.Client)
-
-		coll := db.Client.Database(dbName).Collection("users")
-		_, err := coll.InsertMany(ctx, []any{
-			bson.M{"name": "Alice", "age": 30},
-			bson.M{"name": "Bob", "age": 25},
-			bson.M{"name": "Carol", "age": 35},
-			bson.M{"name": "Dave", "age": 40},
-		})
-		require.NoError(t, err)
-
-		// Create index on age
-		_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-			Keys: bson.D{{Key: "age", Value: 1}},
-		})
-		require.NoError(t, err)
-
-		// Use min() and max() together - returns documents with 30 <= age < 40
-		result, err := gc.Execute(ctx, dbName, `db.users.find({}).hint({ age: 1 }).min({ age: 30 }).max({ age: 40 })`)
-		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount)
-	})
-}
-
-func TestWithMaxRowsCapsResults(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_maxrows_cap_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-
-		// Insert 20 documents
-		collection := db.Client.Database(dbName).Collection("items")
-		docs := make([]any, 20)
-		for i := range 20 {
-			docs[i] = bson.M{"index": i}
-		}
-		_, err := collection.InsertMany(ctx, docs)
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-
-		// Without MaxRows - returns all 20
-		result, err := gc.Execute(ctx, dbName, "db.items.find()")
-		require.NoError(t, err)
-		require.Equal(t, 20, result.RowCount)
-
-		// With MaxRows(10) - caps at 10
-		result, err = gc.Execute(ctx, dbName, "db.items.find()", gomongo.WithMaxRows(10))
-		require.NoError(t, err)
-		require.Equal(t, 10, result.RowCount)
-	})
-}
-
-func TestWithMaxRowsQueryLimitTakesPrecedence(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_maxrows_query_limit_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-
-		// Insert 20 documents
-		collection := db.Client.Database(dbName).Collection("items")
-		docs := make([]any, 20)
-		for i := range 20 {
-			docs[i] = bson.M{"index": i}
-		}
-		_, err := collection.InsertMany(ctx, docs)
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-
-		// Query limit(5) is smaller than MaxRows(100) - should return 5
-		result, err := gc.Execute(ctx, dbName, "db.items.find().limit(5)", gomongo.WithMaxRows(100))
-		require.NoError(t, err)
-		require.Equal(t, 5, result.RowCount)
-	})
-}
-
-func TestWithMaxRowsTakesPrecedenceOverLargerLimit(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_maxrows_precedence_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-
-		// Insert 20 documents
-		collection := db.Client.Database(dbName).Collection("items")
-		docs := make([]any, 20)
-		for i := range 20 {
-			docs[i] = bson.M{"index": i}
-		}
-		_, err := collection.InsertMany(ctx, docs)
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-
-		// Query limit(100) is larger than MaxRows(5) - should return 5
-		result, err := gc.Execute(ctx, dbName, "db.items.find().limit(100)", gomongo.WithMaxRows(5))
-		require.NoError(t, err)
-		require.Equal(t, 5, result.RowCount)
-	})
-}
-
-func TestExecuteBackwardCompatibility(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_backward_compat_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-
-		collection := db.Client.Database(dbName).Collection("items")
-		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"name": "a"},
-			bson.M{"name": "b"},
-			bson.M{"name": "c"},
-		})
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-
-		// Execute without options should work (backward compatible)
-		result, err := gc.Execute(ctx, dbName, "db.items.find()")
-		require.NoError(t, err)
-		require.Equal(t, 3, result.RowCount)
-	})
-}
-
-func TestCountDocumentsWithMaxRows(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_count_maxrows_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-
-		// Insert 100 documents
-		collection := db.Client.Database(dbName).Collection("items")
-		docs := make([]any, 100)
-		for i := range 100 {
-			docs[i] = bson.M{"index": i}
-		}
-		_, err := collection.InsertMany(ctx, docs)
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-
-		// Without MaxRows - counts all 100
-		result, err := gc.Execute(ctx, dbName, "db.items.countDocuments()")
-		require.NoError(t, err)
-		require.Equal(t, "100", result.Rows[0])
-
-		// With MaxRows(50) - counts up to 50
-		result, err = gc.Execute(ctx, dbName, "db.items.countDocuments()", gomongo.WithMaxRows(50))
-		require.NoError(t, err)
-		require.Equal(t, "50", result.Rows[0])
-	})
-}
-
-func TestFindWithNestedAndOr(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_nested_andor_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-		collection := db.Client.Database(dbName).Collection("items")
-		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"a": 1, "b": 2, "c": 3},
-			bson.M{"a": 1, "b": 9, "c": 3},
-			bson.M{"a": 9, "b": 2, "c": 3},
-			bson.M{"a": 9, "b": 9, "c": 9},
-		})
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-		// {$and: [{$or: [{a: 1}, {b: 2}]}, {c: 3}]}
-		result, err := gc.Execute(ctx, dbName, `db.items.find({$and: [{$or: [{a: 1}, {b: 2}]}, {c: 3}]})`)
-		require.NoError(t, err)
-		require.Equal(t, 3, result.RowCount)
-	})
-}
-
-func TestFindWithMultipleOperatorsSameField(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_multi_op_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-		collection := db.Client.Database(dbName).Collection("items")
-		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"age": 15},
-			bson.M{"age": 25},
-			bson.M{"age": 30},
-			bson.M{"age": 35},
-			bson.M{"age": 55},
-		})
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-		// {age: {$gt: 20, $lt: 50, $ne: 30}}
-		result, err := gc.Execute(ctx, dbName, `db.items.find({age: {$gt: 20, $lt: 50, $ne: 30}})`)
-		require.NoError(t, err)
-		require.Equal(t, 2, result.RowCount) // 25 and 35
-	})
-}
-
-func TestFindWithElemMatch(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_elemmatch_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-		collection := db.Client.Database(dbName).Collection("students")
-		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"name": "Alice", "scores": []bson.M{{"subject": "math", "score": 95}, {"subject": "english", "score": 80}}},
-			bson.M{"name": "Bob", "scores": []bson.M{{"subject": "math", "score": 70}, {"subject": "english", "score": 75}}},
-		})
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-		result, err := gc.Execute(ctx, dbName, `db.students.find({scores: {$elemMatch: {score: {$gt: 90}}}})`)
-		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount)
-		require.Contains(t, result.Rows[0], "Alice")
-	})
-}
-
-func TestFindAllCursorModifiers(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		dbName := fmt.Sprintf("testdb_all_modifiers_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-		collection := db.Client.Database(dbName).Collection("items")
-		docs := make([]any, 20)
-		for i := range 20 {
-			docs[i] = bson.M{"idx": i, "name": fmt.Sprintf("item%02d", i)}
-		}
-		_, err := collection.InsertMany(ctx, docs)
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-		// sort descending, skip 5, limit 3, project only idx
-		result, err := gc.Execute(ctx, dbName, `db.items.find().sort({idx: -1}).skip(5).limit(3).projection({idx: 1, _id: 0})`)
-		require.NoError(t, err)
-		require.Equal(t, 3, result.RowCount)
-		// Should get idx 14, 13, 12 (sorted desc, skip top 5: 19,18,17,16,15)
-		require.Contains(t, result.Rows[0], "14")
-		require.Contains(t, result.Rows[1], "13")
-		require.Contains(t, result.Rows[2], "12")
-	})
-}
-
-func TestAggregateWithJSFunction(t *testing.T) {
-	// Skip: The ANTLR-based MongoDB parser does not support JavaScript function literals.
-	// The parser fails with "no viable alternative at input '...body: function'" when
-	// encountering inline JavaScript functions in $function operators.
-	// This is a parser limitation, not a gomongo limitation.
-	t.Skip("Parser does not support JavaScript function literals in $function operator")
-
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		// DocumentDB may not support $function
-		if db.Name == "documentdb" {
-			t.Skip("DocumentDB does not support $function")
-		}
-
-		dbName := fmt.Sprintf("testdb_js_func_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-		collection := db.Client.Database(dbName).Collection("numbers")
-		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"value": 2},
-			bson.M{"value": 3},
-			bson.M{"value": 4},
-		})
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-		result, err := gc.Execute(ctx, dbName, `db.numbers.aggregate([
-			{$addFields: {
-				isEven: {
-					$function: {
-						body: function(x) { return x % 2 === 0; },
-						args: ["$value"],
-						lang: "js"
-					}
-				}
-			}}
-		])`)
-		require.NoError(t, err)
-		require.Equal(t, 3, result.RowCount)
-	})
-}
-
-func TestFindWithWhere(t *testing.T) {
-	// Skip: The ANTLR-based MongoDB parser does not support JavaScript function literals.
-	// The parser fails with "no viable alternative at input 'find({$where: function'" when
-	// encountering inline JavaScript functions in $where clauses.
-	// This is a parser limitation, not a gomongo limitation.
-	t.Skip("Parser does not support JavaScript function literals in $where clause")
-
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
-		// DocumentDB may not support $where
-		if db.Name == "documentdb" {
-			t.Skip("DocumentDB does not support $where")
-		}
-
-		dbName := fmt.Sprintf("testdb_where_%s", db.Name)
-		defer testutil.CleanupDatabase(t, db.Client, dbName)
-
-		ctx := context.Background()
-		collection := db.Client.Database(dbName).Collection("items")
-		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"a": 5, "b": 10},
-			bson.M{"a": 10, "b": 5},
-			bson.M{"a": 3, "b": 3},
-		})
-		require.NoError(t, err)
-
-		gc := gomongo.NewClient(db.Client)
-		result, err := gc.Execute(ctx, dbName, `db.items.find({$where: function() { return this.a > this.b; }})`)
-		require.NoError(t, err)
-		require.Equal(t, 1, result.RowCount) // Only {a: 10, b: 5}
+		require.Equal(t, 2, len(result.Value))
 	})
 }

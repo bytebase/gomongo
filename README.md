@@ -23,6 +23,7 @@ import (
     "log"
 
     "github.com/bytebase/gomongo"
+    "go.mongodb.org/mongo-driver/v2/bson"
     "go.mongodb.org/mongo-driver/v2/mongo"
     "go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -46,10 +47,27 @@ func main() {
         log.Fatal(err)
     }
 
-    // Print results (Extended JSON format)
-    for _, row := range result.Rows {
-        fmt.Println(row)
+    // Result.Value contains []any - type depends on operation
+    // For find(), each element is bson.D
+    for _, val := range result.Value {
+        doc, ok := val.(bson.D)
+        if !ok {
+            log.Printf("unexpected type %T\n", val)
+            continue
+        }
+        fmt.Printf("%+v\n", doc)
     }
+
+    // For countDocuments(), single element is int64
+    countResult, err := gc.Execute(ctx, "mydb", `db.users.countDocuments({})`)
+    if err != nil {
+        log.Fatal(err)
+    }
+    count, ok := countResult.Value[0].(int64)
+    if !ok {
+        log.Fatalf("unexpected type %T\n", countResult.Value[0])
+    }
+    fmt.Printf("Count: %d\n", count)
 }
 ```
 
@@ -74,16 +92,19 @@ result, err := gc.Execute(ctx, "mydb", `db.users.find()`, gomongo.WithMaxRows(10
 
 ## Output Format
 
-Results are returned in Extended JSON (Relaxed) format:
+Results are returned as native Go types in `Result.Value` (a `[]any` slice). Use `Result.Operation` to determine the expected type:
 
-```json
-{
-  "_id": {"$oid": "507f1f77bcf86cd799439011"},
-  "name": "Alice",
-  "age": 30,
-  "createdAt": {"$date": "2024-01-01T00:00:00Z"}
-}
-```
+| Operation | Value Type |
+|-----------|-----------|
+| `OpFind`, `OpAggregate`, `OpGetIndexes`, `OpGetCollectionInfos` | Each element is `bson.D` |
+| `OpFindOne`, `OpFindOneAnd*` | 0 or 1 element of `bson.D` |
+| `OpCountDocuments`, `OpEstimatedDocumentCount` | Single `int64` |
+| `OpDistinct` | Elements are the distinct values |
+| `OpShowDatabases`, `OpShowCollections`, `OpGetCollectionNames` | Each element is `string` |
+| `OpInsert*`, `OpUpdate*`, `OpReplace*`, `OpDelete*` | Single `bson.D` with result |
+| `OpCreateIndex` | Single `string` (index name) |
+| `OpDropIndex`, `OpDropIndexes`, `OpCreateCollection`, `OpDropDatabase`, `OpRenameCollection` | Single `bson.D` with `{ok: 1}` |
+| `OpDrop` | Single `bool` (true) |
 
 ## Command Reference
 
@@ -191,25 +212,25 @@ Results are returned in Extended JSON (Relaxed) format:
 
 *Note: `wtimeout` is parsed but ignored as it's not supported in MongoDB Go driver v2.
 
-### Milestone 3: Administrative Operations (Planned)
+### Milestone 3: Administrative Operations
 
 #### Index Management
 
 | Command | Syntax | Status |
 |---------|--------|--------|
-| db.collection.createIndex() | `createIndex(keys)` | Not yet supported |
+| db.collection.createIndex() | `createIndex(keys, options)` | Supported |
 | db.collection.createIndexes() | `createIndexes(indexSpecs)` | Not yet supported |
-| db.collection.dropIndex() | `dropIndex(index)` | Not yet supported |
-| db.collection.dropIndexes() | `dropIndexes()` | Not yet supported |
+| db.collection.dropIndex() | `dropIndex(index)` | Supported |
+| db.collection.dropIndexes() | `dropIndexes()` | Supported |
 
 #### Collection Management
 
 | Command | Syntax | Status |
 |---------|--------|--------|
-| db.createCollection() | `db.createCollection(name)` | Not yet supported |
-| db.collection.drop() | `drop()` | Not yet supported |
-| db.collection.renameCollection() | `renameCollection(newName)` | Not yet supported |
-| db.dropDatabase() | `db.dropDatabase()` | Not yet supported |
+| db.createCollection() | `db.createCollection(name, options)` | Supported |
+| db.collection.drop() | `drop()` | Supported |
+| db.collection.renameCollection() | `renameCollection(newName, dropTarget)` | Supported |
+| db.dropDatabase() | `db.dropDatabase()` | Supported |
 
 #### Database Information
 
