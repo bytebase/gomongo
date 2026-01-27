@@ -3,7 +3,6 @@ package gomongo_test
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +11,24 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
+
+// containsCollectionName checks if the rows contain a JSON object with the given collection name.
+func containsCollectionName(rows []string, name string) bool {
+	for _, row := range rows {
+		var doc bson.M
+		if err := bson.UnmarshalExtJSON([]byte(row), false, &doc); err == nil {
+			if doc["name"] == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// containsDatabaseName checks if the rows contain a JSON object with the given database name.
+func containsDatabaseName(rows []string, name string) bool {
+	return containsCollectionName(rows, name) // Same logic
+}
 
 func TestCreateIndex(t *testing.T) {
 	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
@@ -163,7 +180,7 @@ func TestCreateCollection(t *testing.T) {
 		collResult, err := gc.Execute(ctx, dbName, `show collections`)
 		require.NoError(t, err)
 		require.Equal(t, 1, collResult.RowCount)
-		require.Equal(t, "newcollection", collResult.Rows[0])
+		require.True(t, containsCollectionName(collResult.Rows, "newcollection"), "expected 'newcollection' in result")
 	})
 }
 
@@ -183,7 +200,7 @@ func TestDropDatabase(t *testing.T) {
 		// Verify database exists
 		result, err := gc.Execute(ctx, dbName, `show dbs`)
 		require.NoError(t, err)
-		require.True(t, slices.Contains(result.Rows, dbName), "database should exist before drop")
+		require.True(t, containsDatabaseName(result.Rows, dbName), "database should exist before drop")
 
 		// Drop the database
 		result, err = gc.Execute(ctx, dbName, `db.dropDatabase()`)
@@ -216,7 +233,7 @@ func TestRenameCollection(t *testing.T) {
 		collResult, err := gc.Execute(ctx, dbName, `show collections`)
 		require.NoError(t, err)
 		require.Equal(t, 1, collResult.RowCount)
-		require.Equal(t, "newname", collResult.Rows[0])
+		require.True(t, containsCollectionName(collResult.Rows, "newname"), "expected 'newname' in result")
 
 		// Verify data is preserved
 		findResult, err := gc.Execute(ctx, dbName, `db.newname.find()`)
@@ -252,7 +269,7 @@ func TestRenameCollectionWithDropTarget(t *testing.T) {
 		collResult, err := gc.Execute(ctx, dbName, `show collections`)
 		require.NoError(t, err)
 		require.Equal(t, 1, collResult.RowCount)
-		require.Equal(t, "target", collResult.Rows[0])
+		require.True(t, containsCollectionName(collResult.Rows, "target"), "expected 'target' in result")
 
 		// Verify it has source data, not old target data
 		findResult, err := gc.Execute(ctx, dbName, `db.target.find()`)
@@ -280,7 +297,7 @@ func TestCreateCollectionWithOptions(t *testing.T) {
 		collResult, err := gc.Execute(ctx, dbName, `show collections`)
 		require.NoError(t, err)
 		require.Equal(t, 1, collResult.RowCount)
-		require.Equal(t, "cappedcoll", collResult.Rows[0])
+		require.True(t, containsCollectionName(collResult.Rows, "cappedcoll"), "expected 'cappedcoll' in result")
 	})
 }
 
