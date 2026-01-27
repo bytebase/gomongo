@@ -13,7 +13,7 @@ import (
 // These tests verify BSON helper function conversions through the full pipeline.
 // Since the helper functions are not exported, we test them end-to-end.
 
-// getDocField extracts a string representation of a field from a bson.D document
+// getDocField extracts the value of a field from a bson.D document.
 func getDocField(doc bson.D, key string) any {
 	for _, elem := range doc {
 		if elem.Key == key {

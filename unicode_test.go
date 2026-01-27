@@ -5,20 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-
 	"github.com/bytebase/gomongo"
 	"github.com/bytebase/gomongo/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
-
-func valueToJSONUnicode(v any) string {
-	bytes, err := bson.MarshalExtJSONIndent(v, false, false, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(bytes)
-}
 
 func TestUnicodeInsertAndQuery(t *testing.T) {
 	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
@@ -36,7 +26,7 @@ func TestUnicodeInsertAndQuery(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.findOne({"name": "张三"})`)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(result.Value))
-		row := valueToJSONUnicode(result.Value[0])
+		row := valueToJSON(result.Value[0])
 		require.Contains(t, row, "张三")
 		require.Contains(t, row, "北京")
 	})
@@ -58,7 +48,7 @@ func TestUnicodeArabic(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.findOne({"name": "محمد"})`)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(result.Value))
-		row := valueToJSONUnicode(result.Value[0])
+		row := valueToJSON(result.Value[0])
 		require.Contains(t, row, "محمد")
 	})
 }
@@ -79,7 +69,7 @@ func TestUnicodeEmoji(t *testing.T) {
 		result, err := gc.Execute(ctx, dbName, `db.users.findOne({})`)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(result.Value))
-		row := valueToJSONUnicode(result.Value[0])
+		row := valueToJSON(result.Value[0])
 		require.Contains(t, row, "🎉")
 		require.Contains(t, row, "🔥")
 	})
@@ -148,7 +138,7 @@ func TestUnicodeRoundTrip(t *testing.T) {
 		// Spot check specific unicode values
 		allRows := ""
 		for _, v := range result.Value {
-			allRows += valueToJSONUnicode(v)
+			allRows += valueToJSON(v)
 		}
 		require.Contains(t, allRows, "张三")   // Chinese
 		require.Contains(t, allRows, "田中太郎") // Japanese

@@ -81,23 +81,17 @@ func executeFind(ctx context.Context, client *mongo.Client, database string, op 
 	}
 	defer func() { _ = cursor.Close(ctx) }()
 
-	var docs []bson.D
+	var values []any
 	for cursor.Next(ctx) {
 		var doc bson.D
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("decode failed: %w", err)
 		}
-		docs = append(docs, doc)
+		values = append(values, doc)
 	}
 
 	if err := cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %w", err)
-	}
-
-	// Convert []bson.D to []any
-	values := make([]any, len(docs))
-	for i, doc := range docs {
-		values[i] = doc
 	}
 
 	return &Result{

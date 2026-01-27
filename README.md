@@ -50,13 +50,23 @@ func main() {
     // Result.Value contains []any - type depends on operation
     // For find(), each element is bson.D
     for _, val := range result.Value {
-        doc := val.(bson.D)
+        doc, ok := val.(bson.D)
+        if !ok {
+            log.Printf("unexpected type %T\n", val)
+            continue
+        }
         fmt.Printf("%+v\n", doc)
     }
 
     // For countDocuments(), single element is int64
-    countResult, _ := gc.Execute(ctx, "mydb", `db.users.countDocuments({})`)
-    count := countResult.Value[0].(int64)
+    countResult, err := gc.Execute(ctx, "mydb", `db.users.countDocuments({})`)
+    if err != nil {
+        log.Fatal(err)
+    }
+    count, ok := countResult.Value[0].(int64)
+    if !ok {
+        log.Fatalf("unexpected type %T\n", countResult.Value[0])
+    }
     fmt.Printf("Count: %d\n", count)
 }
 ```

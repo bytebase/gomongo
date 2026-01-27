@@ -33,7 +33,7 @@ func containsCollectionName(values []any, name string) bool {
 }
 
 // containsDatabaseName checks if the values contain the given database name.
-// Values can be strings (from show dbs) or bson.D documents.
+// Values are strings from show dbs.
 func containsDatabaseName(values []any, name string) bool {
 	for _, v := range values {
 		// show dbs returns strings
