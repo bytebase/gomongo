@@ -123,26 +123,26 @@ func (v *visitor) visitMethodChain(ctx mongodb.IMethodChainContext) {
 	if !ok {
 		return
 	}
-	for _, methodCall := range mc.AllMethodCall() {
-		v.visitMethodCall(methodCall)
+
+	if mc.CollectionMethodCall() != nil {
+		v.visitCollectionMethodCall(mc.CollectionMethodCall())
+		if v.err != nil {
+			return
+		}
+	}
+
+	for _, cursorCall := range mc.AllCursorMethodCall() {
+		v.visitCursorMethodCall(cursorCall)
 		if v.err != nil {
 			return
 		}
 	}
 }
 
-func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
-	mc, ok := ctx.(*mongodb.MethodCallContext)
+func (v *visitor) visitCollectionMethodCall(ctx mongodb.ICollectionMethodCallContext) {
+	mc, ok := ctx.(*mongodb.CollectionMethodCallContext)
 	if !ok {
 		return
-	}
-
-	// Determine method context for registry lookup
-	getMethodContext := func() string {
-		if v.operation.OpType == types.OpFind || v.operation.OpType == types.OpFindOne {
-			return "cursor"
-		}
-		return "collection"
 	}
 
 	switch {
@@ -168,32 +168,13 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	case mc.GetIndexesMethod() != nil:
 		v.operation.OpType = types.OpGetIndexes
 
-	// Supported cursor modifiers
-	case mc.SortMethod() != nil:
-		v.extractSort(mc.SortMethod())
-	case mc.LimitMethod() != nil:
-		v.extractLimit(mc.LimitMethod())
-	case mc.SkipMethod() != nil:
-		v.extractSkip(mc.SkipMethod())
-	case mc.ProjectionMethod() != nil:
-		v.extractProjection(mc.ProjectionMethod())
-	case mc.HintMethod() != nil:
-		v.extractHint(mc.HintMethod())
-	case mc.MaxMethod() != nil:
-		v.extractMax(mc.MaxMethod())
-	case mc.MinMethod() != nil:
-		v.extractMin(mc.MinMethod())
-
-	// Supported M2 write operations
+	// Supported write operations
 	case mc.InsertOneMethod() != nil:
 		v.operation.OpType = types.OpInsertOne
 		v.extractInsertOneArgs(mc.InsertOneMethod())
-
 	case mc.InsertManyMethod() != nil:
 		v.operation.OpType = types.OpInsertMany
 		v.extractInsertManyArgs(mc.InsertManyMethod())
-
-	// Supported M2 write operations - updateOne
 	case mc.UpdateOneMethod() != nil:
 		v.operation.OpType = types.OpUpdateOne
 		v.extractUpdateOneArgs(mc.UpdateOneMethod())
@@ -219,12 +200,12 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		v.operation.OpType = types.OpFindOneAndDelete
 		v.extractFindOneAndDeleteArgs(mc.FindOneAndDeleteMethod())
 
-	// Supported M3 index operations
+	// Supported index operations
 	case mc.CreateIndexMethod() != nil:
 		v.operation.OpType = types.OpCreateIndex
 		v.extractCreateIndexArgs(mc.CreateIndexMethod())
 	case mc.CreateIndexesMethod() != nil:
-		v.handleUnsupportedMethod("collection", "createIndexes") // Lower ROI, keep as planned
+		v.handleUnsupportedMethod("collection", "createIndexes")
 	case mc.DropIndexMethod() != nil:
 		v.operation.OpType = types.OpDropIndex
 		v.extractDropIndexArgs(mc.DropIndexMethod())
@@ -232,14 +213,14 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 		v.operation.OpType = types.OpDropIndexes
 		v.extractDropIndexesArgs(mc.DropIndexesMethod())
 
-	// Supported M3 collection management
+	// Supported collection management
 	case mc.DropMethod() != nil:
 		v.operation.OpType = types.OpDrop
 	case mc.RenameCollectionMethod() != nil:
 		v.operation.OpType = types.OpRenameCollection
 		v.extractRenameCollectionArgs(mc.RenameCollectionMethod())
 
-	// Planned M3 stats operations - return PlannedOperationError for fallback
+	// Planned stats operations
 	case mc.StatsMethod() != nil:
 		v.handleUnsupportedMethod("collection", "stats")
 	case mc.StorageSizeMethod() != nil:
@@ -257,34 +238,45 @@ func (v *visitor) visitMethodCall(ctx mongodb.IMethodCallContext) {
 	case mc.LatencyStatsMethod() != nil:
 		v.handleUnsupportedMethod("collection", "latencyStats")
 
-	// Generic method fallback - all methods going through genericMethod are unsupported
-	case mc.GenericMethod() != nil:
-		gmCtx, ok := mc.GenericMethod().(*mongodb.GenericMethodContext)
-		if !ok {
-			return
-		}
-		methodName := gmCtx.Identifier().GetText()
-		v.handleUnsupportedMethod(getMethodContext(), methodName)
-
-	// Default: all other methods not explicitly handled
-	// These go to handleUnsupportedMethod which returns UnsupportedOperationError
-	// since they're not in the planned registry
 	default:
-		// Extract method name from the parse tree for error message
-		methodName := v.extractMethodName(mc)
+		methodName := extractMethodNameFromText(mc.GetText())
 		if methodName != "" {
-			v.handleUnsupportedMethod(getMethodContext(), methodName)
+			v.handleUnsupportedMethod("collection", methodName)
 		}
 	}
 }
 
-// extractMethodName extracts the method name from a MethodCallContext for error messages.
-func (v *visitor) extractMethodName(mc *mongodb.MethodCallContext) string {
-	// Try to get method name from various method contexts
-	// The parser creates specific method contexts for known methods
-	// For unknown methods, they go through GenericMethod which is handled separately
-	text := mc.GetText()
-	// Extract method name before the opening parenthesis
+func (v *visitor) visitCursorMethodCall(ctx mongodb.ICursorMethodCallContext) {
+	mc, ok := ctx.(*mongodb.CursorMethodCallContext)
+	if !ok {
+		return
+	}
+
+	switch {
+	case mc.SortMethod() != nil:
+		v.extractSort(mc.SortMethod())
+	case mc.LimitMethod() != nil:
+		v.extractLimit(mc.LimitMethod())
+	case mc.SkipMethod() != nil:
+		v.extractSkip(mc.SkipMethod())
+	case mc.ProjectionMethod() != nil:
+		v.extractProjection(mc.ProjectionMethod())
+	case mc.HintMethod() != nil:
+		v.extractHint(mc.HintMethod())
+	case mc.MaxMethod() != nil:
+		v.extractMax(mc.MaxMethod())
+	case mc.MinMethod() != nil:
+		v.extractMin(mc.MinMethod())
+	default:
+		methodName := extractMethodNameFromText(mc.GetText())
+		if methodName != "" {
+			v.handleUnsupportedMethod("cursor", methodName)
+		}
+	}
+}
+
+// extractMethodNameFromText extracts the method name from a parse tree text before the opening parenthesis.
+func extractMethodNameFromText(text string) string {
 	if idx := strings.Index(text, "("); idx > 0 {
 		return text[:idx]
 	}
