@@ -291,29 +291,43 @@ func executeCreateIndexes(ctx context.Context, client *mongo.Client, database st
 		for _, field := range spec {
 			switch field.Key {
 			case "key":
-				if keys, ok := field.Value.(bson.D); ok {
-					model.Keys = keys
+				keys, ok := field.Value.(bson.D)
+				if !ok {
+					return nil, fmt.Errorf("createIndexes failed: 'key' must be a document")
 				}
+				model.Keys = keys
 			case "name":
-				if name, ok := field.Value.(string); ok {
-					opts.SetName(name)
-					hasOptions = true
+				name, ok := field.Value.(string)
+				if !ok {
+					return nil, fmt.Errorf("createIndexes failed: 'name' must be a string")
 				}
+				opts.SetName(name)
+				hasOptions = true
 			case "unique":
-				if unique, ok := field.Value.(bool); ok && unique {
+				unique, ok := field.Value.(bool)
+				if !ok {
+					return nil, fmt.Errorf("createIndexes failed: 'unique' must be a bool")
+				}
+				if unique {
 					opts.SetUnique(true)
 					hasOptions = true
 				}
 			case "sparse":
-				if sparse, ok := field.Value.(bool); ok && sparse {
+				sparse, ok := field.Value.(bool)
+				if !ok {
+					return nil, fmt.Errorf("createIndexes failed: 'sparse' must be a bool")
+				}
+				if sparse {
 					opts.SetSparse(true)
 					hasOptions = true
 				}
 			case "expireAfterSeconds":
-				if val, ok := translator.ToInt32(field.Value); ok {
-					opts.SetExpireAfterSeconds(val)
-					hasOptions = true
+				val, ok := translator.ToInt32(field.Value)
+				if !ok {
+					return nil, fmt.Errorf("createIndexes failed: 'expireAfterSeconds' must be a number")
 				}
+				opts.SetExpireAfterSeconds(val)
+				hasOptions = true
 			}
 		}
 
@@ -405,7 +419,10 @@ func executeDbVersion(ctx context.Context, client *mongo.Client, database string
 	if err != nil {
 		return nil, fmt.Errorf("version failed: %w", err)
 	}
-	version, _ := findField(result, "version").(string)
+	version, ok := findField(result, "version").(string)
+	if !ok {
+		return nil, fmt.Errorf("version failed: version field missing or not a string in buildInfo result")
+	}
 	return &Result{Operation: types.OpDbVersion, Value: []any{version}}, nil
 }
 

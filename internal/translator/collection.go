@@ -2204,16 +2204,16 @@ func (v *visitor) extractCreateIndexesArgs(ctx mongodb.ICreateIndexesMethodConte
 			v.err = fmt.Errorf("createIndexes() element %d must be a document", i)
 			return
 		}
-		// Validate that each spec has a "key" field
-		hasKey := false
+		// Validate that each spec has a "key" field that is a non-empty document
+		var keyDoc bson.D
 		for _, field := range doc {
 			if field.Key == "key" {
-				hasKey = true
+				keyDoc, ok = field.Value.(bson.D)
 				break
 			}
 		}
-		if !hasKey {
-			v.err = fmt.Errorf("createIndexes() element %d must have a 'key' field", i)
+		if keyDoc == nil || len(keyDoc) == 0 {
+			v.err = fmt.Errorf("createIndexes() element %d must have a non-empty 'key' document", i)
 			return
 		}
 		specs = append(specs, doc)
