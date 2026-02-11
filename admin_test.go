@@ -558,7 +558,8 @@ func TestCollectionStats(t *testing.T) {
 }
 
 func TestServerStatus(t *testing.T) {
-	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+	// serverStatus is not supported on DocumentDB
+	testutil.RunOnMongoDBOnly(t, func(t *testing.T, db testutil.TestDB) {
 		dbName := fmt.Sprintf("testdb_server_status_%s", db.Name)
 		defer testutil.CleanupDatabase(t, db.Client, dbName)
 

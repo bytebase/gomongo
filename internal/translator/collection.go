@@ -2208,11 +2208,11 @@ func (v *visitor) extractCreateIndexesArgs(ctx mongodb.ICreateIndexesMethodConte
 		var keyDoc bson.D
 		for _, field := range doc {
 			if field.Key == "key" {
-				keyDoc, ok = field.Value.(bson.D)
+				keyDoc, _ = field.Value.(bson.D)
 				break
 			}
 		}
-		if keyDoc == nil || len(keyDoc) == 0 {
+		if len(keyDoc) == 0 {
 			v.err = fmt.Errorf("createIndexes() element %d must have a non-empty 'key' document", i)
 			return
 		}
