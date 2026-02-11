@@ -54,6 +54,7 @@ type Operation struct {
 	IndexUnique *bool    // createIndex unique option
 	IndexSparse *bool    // createIndex sparse option
 	IndexTTL    *int32   // createIndex expireAfterSeconds option
+	IndexSpecs  []bson.D // createIndexes array of index specifications
 
 	// createCollection options
 	Capped           *bool  // createCollection capped option

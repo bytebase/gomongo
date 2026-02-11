@@ -66,6 +66,19 @@ func (v *visitor) visitDbStatement(ctx mongodb.IDbStatementContext) {
 		v.extractCreateCollectionArgs(c)
 	case *mongodb.DropDatabaseContext:
 		v.operation.OpType = types.OpDropDatabase
+	// Database information commands
+	case *mongodb.DbStatsContext:
+		v.operation.OpType = types.OpDbStats
+	case *mongodb.ServerStatusContext:
+		v.operation.OpType = types.OpServerStatus
+	case *mongodb.ServerBuildInfoContext:
+		v.operation.OpType = types.OpServerBuildInfo
+	case *mongodb.DbVersionContext:
+		v.operation.OpType = types.OpDbVersion
+	case *mongodb.HostInfoContext:
+		v.operation.OpType = types.OpHostInfo
+	case *mongodb.ListCommandsContext:
+		v.operation.OpType = types.OpListCommands
 	}
 }
 
@@ -205,7 +218,8 @@ func (v *visitor) visitCollectionMethodCall(ctx mongodb.ICollectionMethodCallCon
 		v.operation.OpType = types.OpCreateIndex
 		v.extractCreateIndexArgs(mc.CreateIndexMethod())
 	case mc.CreateIndexesMethod() != nil:
-		v.handleUnsupportedMethod("collection", "createIndexes")
+		v.operation.OpType = types.OpCreateIndexes
+		v.extractCreateIndexesArgs(mc.CreateIndexesMethod())
 	case mc.DropIndexMethod() != nil:
 		v.operation.OpType = types.OpDropIndex
 		v.extractDropIndexArgs(mc.DropIndexMethod())
@@ -220,23 +234,23 @@ func (v *visitor) visitCollectionMethodCall(ctx mongodb.ICollectionMethodCallCon
 		v.operation.OpType = types.OpRenameCollection
 		v.extractRenameCollectionArgs(mc.RenameCollectionMethod())
 
-	// Planned stats operations
+	// Collection information commands
 	case mc.StatsMethod() != nil:
-		v.handleUnsupportedMethod("collection", "stats")
+		v.operation.OpType = types.OpCollectionStats
 	case mc.StorageSizeMethod() != nil:
-		v.handleUnsupportedMethod("collection", "storageSize")
+		v.operation.OpType = types.OpStorageSize
 	case mc.TotalIndexSizeMethod() != nil:
-		v.handleUnsupportedMethod("collection", "totalIndexSize")
+		v.operation.OpType = types.OpTotalIndexSize
 	case mc.TotalSizeMethod() != nil:
-		v.handleUnsupportedMethod("collection", "totalSize")
+		v.operation.OpType = types.OpTotalSize
 	case mc.DataSizeMethod() != nil:
-		v.handleUnsupportedMethod("collection", "dataSize")
+		v.operation.OpType = types.OpDataSize
 	case mc.IsCappedMethod() != nil:
-		v.handleUnsupportedMethod("collection", "isCapped")
+		v.operation.OpType = types.OpIsCapped
 	case mc.ValidateMethod() != nil:
-		v.handleUnsupportedMethod("collection", "validate")
+		v.operation.OpType = types.OpValidate
 	case mc.LatencyStatsMethod() != nil:
-		v.handleUnsupportedMethod("collection", "latencyStats")
+		v.operation.OpType = types.OpLatencyStats
 
 	default:
 		methodName := extractMethodNameFromText(mc.GetText())
@@ -283,16 +297,8 @@ func extractMethodNameFromText(text string) string {
 	return text
 }
 
-// handleUnsupportedMethod checks the method registry and returns appropriate errors.
-// If method is in registry (planned for M2/M3) -> PlannedOperationError (fallback to mongosh)
-// If method is NOT in registry -> UnsupportedOperationError (no fallback)
-func (v *visitor) handleUnsupportedMethod(context, methodName string) {
-	if IsPlannedMethod(context, methodName) {
-		v.err = &PlannedOperationError{
-			Operation: methodName + "()",
-		}
-		return
-	}
+// handleUnsupportedMethod returns an UnsupportedOperationError for unknown methods.
+func (v *visitor) handleUnsupportedMethod(_, methodName string) {
 	v.err = &UnsupportedOperationError{
 		Operation: methodName + "()",
 	}
