@@ -297,16 +297,8 @@ func extractMethodNameFromText(text string) string {
 	return text
 }
 
-// handleUnsupportedMethod checks the method registry and returns appropriate errors.
-// If method is in registry (planned for M2/M3) -> PlannedOperationError (fallback to mongosh)
-// If method is NOT in registry -> UnsupportedOperationError (no fallback)
-func (v *visitor) handleUnsupportedMethod(context, methodName string) {
-	if IsPlannedMethod(context, methodName) {
-		v.err = &PlannedOperationError{
-			Operation: methodName + "()",
-		}
-		return
-	}
+// handleUnsupportedMethod returns an UnsupportedOperationError for unknown methods.
+func (v *visitor) handleUnsupportedMethod(_, methodName string) {
 	v.err = &UnsupportedOperationError{
 		Operation: methodName + "()",
 	}
