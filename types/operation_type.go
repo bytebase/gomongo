@@ -30,10 +30,27 @@ const (
 	OpFindOneAndDelete
 	// Administrative Operations
 	OpCreateIndex
+	OpCreateIndexes
 	OpDropIndex
 	OpDropIndexes
 	OpDrop
 	OpCreateCollection
 	OpDropDatabase
 	OpRenameCollection
+	// Database Information
+	OpDbStats
+	OpCollectionStats
+	OpServerStatus
+	OpServerBuildInfo
+	OpDbVersion
+	OpHostInfo
+	OpListCommands
+	// Collection Information
+	OpDataSize
+	OpStorageSize
+	OpTotalIndexSize
+	OpTotalSize
+	OpIsCapped
+	OpValidate
+	OpLatencyStats
 )

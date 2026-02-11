@@ -75,6 +75,38 @@ func Execute(ctx context.Context, client *mongo.Client, database string, op *tra
 		return executeDropDatabase(ctx, client, database)
 	case types.OpRenameCollection:
 		return executeRenameCollection(ctx, client, database, op)
+	case types.OpCreateIndexes:
+		return executeCreateIndexes(ctx, client, database, op)
+	// Database Information
+	case types.OpDbStats:
+		return executeDbStats(ctx, client, database)
+	case types.OpCollectionStats:
+		return executeCollectionStats(ctx, client, database, op)
+	case types.OpServerStatus:
+		return executeServerStatus(ctx, client, database)
+	case types.OpServerBuildInfo:
+		return executeServerBuildInfo(ctx, client, database)
+	case types.OpDbVersion:
+		return executeDbVersion(ctx, client, database)
+	case types.OpHostInfo:
+		return executeHostInfo(ctx, client, database)
+	case types.OpListCommands:
+		return executeListCommands(ctx, client, database)
+	// Collection Information
+	case types.OpDataSize:
+		return executeDataSize(ctx, client, database, op)
+	case types.OpStorageSize:
+		return executeStorageSize(ctx, client, database, op)
+	case types.OpTotalIndexSize:
+		return executeTotalIndexSize(ctx, client, database, op)
+	case types.OpTotalSize:
+		return executeTotalSize(ctx, client, database, op)
+	case types.OpIsCapped:
+		return executeIsCapped(ctx, client, database, op)
+	case types.OpValidate:
+		return executeValidate(ctx, client, database, op)
+	case types.OpLatencyStats:
+		return executeLatencyStats(ctx, client, database, op)
 	default:
 		return nil, fmt.Errorf("unsupported operation: %s", statement)
 	}

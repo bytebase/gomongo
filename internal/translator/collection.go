@@ -2146,3 +2146,82 @@ func (v *visitor) extractRenameCollectionArgs(ctx mongodb.IRenameCollectionMetho
 		return
 	}
 }
+
+// extractCreateIndexesArgs extracts arguments from CreateIndexesMethodContext.
+func (v *visitor) extractCreateIndexesArgs(ctx mongodb.ICreateIndexesMethodContext) {
+	method, ok := ctx.(*mongodb.CreateIndexesMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("createIndexes() requires an array of index specifications")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("createIndexes() requires an array of index specifications")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("createIndexes() requires an array of index specifications")
+		return
+	}
+
+	// First argument: array of index spec documents (required)
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("createIndexes() requires an array of index specifications")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("createIndexes() requires an array of index specifications")
+		return
+	}
+
+	arrayValue, ok := valueCtx.(*mongodb.ArrayValueContext)
+	if !ok {
+		v.err = fmt.Errorf("createIndexes() requires an array argument")
+		return
+	}
+
+	arr, err := convertArray(arrayValue.Array())
+	if err != nil {
+		v.err = fmt.Errorf("invalid index specifications: %w", err)
+		return
+	}
+
+	var specs []bson.D
+	for i, elem := range arr {
+		doc, ok := elem.(bson.D)
+		if !ok {
+			v.err = fmt.Errorf("createIndexes() element %d must be a document", i)
+			return
+		}
+		// Validate that each spec has a "key" field
+		hasKey := false
+		for _, field := range doc {
+			if field.Key == "key" {
+				hasKey = true
+				break
+			}
+		}
+		if !hasKey {
+			v.err = fmt.Errorf("createIndexes() element %d must have a 'key' field", i)
+			return
+		}
+		specs = append(specs, doc)
+	}
+	v.operation.IndexSpecs = specs
+
+	if len(allArgs) > 1 {
+		v.err = fmt.Errorf("createIndexes() takes exactly 1 argument")
+		return
+	}
+}

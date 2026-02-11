@@ -277,3 +277,253 @@ func executeRenameCollection(ctx context.Context, client *mongo.Client, database
 		Value:     []any{response},
 	}, nil
 }
+
+// executeCreateIndexes executes a db.collection.createIndexes() command.
+func executeCreateIndexes(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	collection := client.Database(database).Collection(op.Collection)
+
+	var models []mongo.IndexModel
+	for _, spec := range op.IndexSpecs {
+		model := mongo.IndexModel{}
+		opts := options.Index()
+		hasOptions := false
+
+		for _, field := range spec {
+			switch field.Key {
+			case "key":
+				if keys, ok := field.Value.(bson.D); ok {
+					model.Keys = keys
+				}
+			case "name":
+				if name, ok := field.Value.(string); ok {
+					opts.SetName(name)
+					hasOptions = true
+				}
+			case "unique":
+				if unique, ok := field.Value.(bool); ok && unique {
+					opts.SetUnique(true)
+					hasOptions = true
+				}
+			case "sparse":
+				if sparse, ok := field.Value.(bool); ok && sparse {
+					opts.SetSparse(true)
+					hasOptions = true
+				}
+			case "expireAfterSeconds":
+				if val, ok := translator.ToInt32(field.Value); ok {
+					opts.SetExpireAfterSeconds(val)
+					hasOptions = true
+				}
+			}
+		}
+
+		if hasOptions {
+			model.Options = opts
+		}
+		models = append(models, model)
+	}
+
+	names, err := collection.Indexes().CreateMany(ctx, models)
+	if err != nil {
+		return nil, fmt.Errorf("createIndexes failed: %w", err)
+	}
+
+	values := make([]any, len(names))
+	for i, name := range names {
+		values[i] = name
+	}
+
+	return &Result{
+		Operation: types.OpCreateIndexes,
+		Value:     values,
+	}, nil
+}
+
+// runCommand executes a RunCommand and returns the result as bson.D.
+func runCommand(ctx context.Context, db *mongo.Database, command bson.D) (bson.D, error) {
+	var result bson.D
+	if err := db.RunCommand(ctx, command).Decode(&result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// runCollStats executes the collStats command and returns the full result.
+func runCollStats(ctx context.Context, client *mongo.Client, database, collection string) (bson.D, error) {
+	return runCommand(ctx, client.Database(database), bson.D{{Key: "collStats", Value: collection}})
+}
+
+// findField finds a field value in a bson.D by key.
+func findField(doc bson.D, key string) any {
+	for _, elem := range doc {
+		if elem.Key == key {
+			return elem.Value
+		}
+	}
+	return nil
+}
+
+// executeDbStats executes a db.stats() command.
+func executeDbStats(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "dbStats", Value: int32(1)}})
+	if err != nil {
+		return nil, fmt.Errorf("dbStats failed: %w", err)
+	}
+	return &Result{Operation: types.OpDbStats, Value: []any{result}}, nil
+}
+
+// executeCollectionStats executes a db.collection.stats() command.
+func executeCollectionStats(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	result, err := runCollStats(ctx, client, database, op.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("collStats failed: %w", err)
+	}
+	return &Result{Operation: types.OpCollectionStats, Value: []any{result}}, nil
+}
+
+// executeServerStatus executes a db.serverStatus() command.
+func executeServerStatus(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "serverStatus", Value: int32(1)}})
+	if err != nil {
+		return nil, fmt.Errorf("serverStatus failed: %w", err)
+	}
+	return &Result{Operation: types.OpServerStatus, Value: []any{result}}, nil
+}
+
+// executeServerBuildInfo executes a db.serverBuildInfo() command.
+func executeServerBuildInfo(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "buildInfo", Value: int32(1)}})
+	if err != nil {
+		return nil, fmt.Errorf("serverBuildInfo failed: %w", err)
+	}
+	return &Result{Operation: types.OpServerBuildInfo, Value: []any{result}}, nil
+}
+
+// executeDbVersion executes a db.version() command.
+func executeDbVersion(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "buildInfo", Value: int32(1)}})
+	if err != nil {
+		return nil, fmt.Errorf("version failed: %w", err)
+	}
+	version, _ := findField(result, "version").(string)
+	return &Result{Operation: types.OpDbVersion, Value: []any{version}}, nil
+}
+
+// executeHostInfo executes a db.hostInfo() command.
+func executeHostInfo(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "hostInfo", Value: int32(1)}})
+	if err != nil {
+		return nil, fmt.Errorf("hostInfo failed: %w", err)
+	}
+	return &Result{Operation: types.OpHostInfo, Value: []any{result}}, nil
+}
+
+// executeListCommands executes a db.listCommands() command.
+func executeListCommands(ctx context.Context, client *mongo.Client, database string) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "listCommands", Value: int32(1)}})
+	if err != nil {
+		return nil, fmt.Errorf("listCommands failed: %w", err)
+	}
+	return &Result{Operation: types.OpListCommands, Value: []any{result}}, nil
+}
+
+// executeDataSize executes a db.collection.dataSize() command.
+func executeDataSize(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	stats, err := runCollStats(ctx, client, database, op.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("dataSize failed: %w", err)
+	}
+	size := findField(stats, "size")
+	if size == nil {
+		size = int32(0)
+	}
+	return &Result{Operation: types.OpDataSize, Value: []any{size}}, nil
+}
+
+// executeStorageSize executes a db.collection.storageSize() command.
+func executeStorageSize(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	stats, err := runCollStats(ctx, client, database, op.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("storageSize failed: %w", err)
+	}
+	storageSize := findField(stats, "storageSize")
+	if storageSize == nil {
+		storageSize = int32(0)
+	}
+	return &Result{Operation: types.OpStorageSize, Value: []any{storageSize}}, nil
+}
+
+// executeTotalIndexSize executes a db.collection.totalIndexSize() command.
+func executeTotalIndexSize(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	stats, err := runCollStats(ctx, client, database, op.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("totalIndexSize failed: %w", err)
+	}
+	totalIndexSize := findField(stats, "totalIndexSize")
+	if totalIndexSize == nil {
+		totalIndexSize = int32(0)
+	}
+	return &Result{Operation: types.OpTotalIndexSize, Value: []any{totalIndexSize}}, nil
+}
+
+// executeTotalSize executes a db.collection.totalSize() command.
+func executeTotalSize(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	stats, err := runCollStats(ctx, client, database, op.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("totalSize failed: %w", err)
+	}
+	storage, _ := translator.ToInt64(findField(stats, "storageSize"))
+	indexSize, _ := translator.ToInt64(findField(stats, "totalIndexSize"))
+	return &Result{Operation: types.OpTotalSize, Value: []any{storage + indexSize}}, nil
+}
+
+// executeIsCapped executes a db.collection.isCapped() command.
+func executeIsCapped(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	stats, err := runCollStats(ctx, client, database, op.Collection)
+	if err != nil {
+		return nil, fmt.Errorf("isCapped failed: %w", err)
+	}
+	capped, _ := findField(stats, "capped").(bool)
+	return &Result{Operation: types.OpIsCapped, Value: []any{capped}}, nil
+}
+
+// executeValidate executes a db.collection.validate() command.
+func executeValidate(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), bson.D{{Key: "validate", Value: op.Collection}})
+	if err != nil {
+		return nil, fmt.Errorf("validate failed: %w", err)
+	}
+	return &Result{Operation: types.OpValidate, Value: []any{result}}, nil
+}
+
+// executeLatencyStats executes a db.collection.latencyStats() command via $collStats aggregation.
+func executeLatencyStats(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	collection := client.Database(database).Collection(op.Collection)
+
+	pipeline := bson.A{
+		bson.D{{Key: "$collStats", Value: bson.D{
+			{Key: "latencyStats", Value: bson.D{{Key: "histograms", Value: true}}},
+		}}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("latencyStats failed: %w", err)
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var values []any
+	for cursor.Next(ctx) {
+		var doc bson.D
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode failed: %w", err)
+		}
+		values = append(values, doc)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return &Result{Operation: types.OpLatencyStats, Value: values}, nil
+}

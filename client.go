@@ -28,8 +28,15 @@ func NewClient(client *mongo.Client) *Client {
 //   - OpShowDatabases, OpShowCollections, OpGetCollectionNames: each element is string
 //   - OpInsertOne, OpInsertMany, OpUpdateOne, OpUpdateMany, OpReplaceOne, OpDeleteOne, OpDeleteMany: single bson.D with operation result
 //   - OpCreateIndex: single element of string (index name)
+//   - OpCreateIndexes: each element is string (index name)
 //   - OpDropIndex, OpDropIndexes, OpCreateCollection, OpDropDatabase, OpRenameCollection: single bson.D with {ok: 1}
 //   - OpDrop: single element of bool (true)
+//   - OpDbStats, OpCollectionStats, OpServerStatus, OpServerBuildInfo, OpHostInfo, OpListCommands, OpValidate: single bson.D (command result)
+//   - OpDbVersion: single element of string (version)
+//   - OpDataSize, OpStorageSize, OpTotalIndexSize: single numeric value from collStats
+//   - OpTotalSize: single int64 (storageSize + totalIndexSize)
+//   - OpIsCapped: single element of bool
+//   - OpLatencyStats: each element is bson.D (aggregation result)
 type Result struct {
 	Operation types.OperationType
 	Value     []any
