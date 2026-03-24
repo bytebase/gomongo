@@ -4,7 +4,7 @@ go 1.24.5
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1
-	github.com/bytebase/parser v0.0.0-20260130090605-effef73942d9
+	github.com/bytebase/parser v0.0.0-20260324035613-3b4d6e704551
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
@@ -76,6 +76,3 @@ require (
 )
 
 replace github.com/antlr4-go/antlr/v4 => github.com/bytebase/antlr/v4 v4.0.0-20240827034948-8c385f108920
-
-// TODO: Remove after parser is published with Int32 string arg support.
-replace github.com/bytebase/parser => ../parser
