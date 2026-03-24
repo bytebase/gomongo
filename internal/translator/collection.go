@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/bytebase/gomongo/types"
 	"github.com/bytebase/parser/mongodb"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -2223,5 +2224,211 @@ func (v *visitor) extractCreateIndexesArgs(ctx mongodb.ICreateIndexesMethodConte
 	if len(allArgs) > 1 {
 		v.err = fmt.Errorf("createIndexes() takes exactly 1 argument")
 		return
+	}
+}
+
+// extractDeprecatedInsertArgs handles the deprecated insert() method.
+// insert(doc) → insertOne, insert([doc1, doc2]) → insertMany.
+func (v *visitor) extractDeprecatedInsertArgs(ctx mongodb.ICollectionInsertMethodContext) {
+	method, ok := ctx.(*mongodb.CollectionInsertMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("insert() requires a document or array argument")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("insert() requires a document or array argument")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) == 0 {
+		v.err = fmt.Errorf("insert() requires a document or array argument")
+		return
+	}
+
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("insert() requires a document or array argument")
+		return
+	}
+
+	valueCtx := firstArg.Value()
+	if valueCtx == nil {
+		v.err = fmt.Errorf("insert() requires a document or array argument")
+		return
+	}
+
+	switch val := valueCtx.(type) {
+	case *mongodb.DocumentValueContext:
+		// Single document → insertOne
+		v.operation.OpType = types.OpInsertOne
+		doc, err := convertDocument(val.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid document: %w", err)
+			return
+		}
+		v.operation.Document = doc
+	case *mongodb.ArrayValueContext:
+		// Array of documents → insertMany
+		v.operation.OpType = types.OpInsertMany
+		arr, err := convertArray(val.Array())
+		if err != nil {
+			v.err = fmt.Errorf("invalid documents array: %w", err)
+			return
+		}
+		var docs []bson.D
+		for i, elem := range arr {
+			doc, ok := elem.(bson.D)
+			if !ok {
+				v.err = fmt.Errorf("insert() element %d must be a document", i)
+				return
+			}
+			docs = append(docs, doc)
+		}
+		v.operation.Documents = docs
+	default:
+		v.err = fmt.Errorf("insert() argument must be a document or array")
+		return
+	}
+}
+
+// extractDeprecatedCountArgs handles the deprecated count() collection method.
+// count(filter?) → countDocuments(filter?).
+func (v *visitor) extractDeprecatedCountArgs(ctx mongodb.ICollectionCountMethodContext) {
+	method, ok := ctx.(*mongodb.CollectionCountMethodContext)
+	if !ok {
+		return
+	}
+	v.extractArgumentsForCountDocuments(method.Arguments())
+}
+
+// extractDeprecatedUpdateArgs handles the deprecated update() method.
+// update(filter, update, options?) — options.multi determines updateOne vs updateMany.
+func (v *visitor) extractDeprecatedUpdateArgs(ctx mongodb.IUpdateMethodContext) {
+	method, ok := ctx.(*mongodb.UpdateMethodContext)
+	if !ok {
+		return
+	}
+
+	args := method.Arguments()
+	if args == nil {
+		v.err = fmt.Errorf("update() requires filter and update arguments")
+		return
+	}
+
+	argsCtx, ok := args.(*mongodb.ArgumentsContext)
+	if !ok {
+		v.err = fmt.Errorf("update() requires filter and update arguments")
+		return
+	}
+
+	allArgs := argsCtx.AllArgument()
+	if len(allArgs) < 2 {
+		v.err = fmt.Errorf("update() requires filter and update arguments")
+		return
+	}
+
+	// Default to updateOne; check for multi option later.
+	v.operation.OpType = types.OpUpdateOne
+
+	// First argument: filter
+	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("update() filter must be a document")
+		return
+	}
+	filterValueCtx := firstArg.Value()
+	if filterValueCtx == nil {
+		v.err = fmt.Errorf("update() filter must be a document")
+		return
+	}
+	filterDocValue, ok := filterValueCtx.(*mongodb.DocumentValueContext)
+	if !ok {
+		v.err = fmt.Errorf("update() filter must be a document")
+		return
+	}
+	filter, err := convertDocument(filterDocValue.Document())
+	if err != nil {
+		v.err = fmt.Errorf("invalid filter: %w", err)
+		return
+	}
+	v.operation.Filter = filter
+
+	// Second argument: update
+	secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
+	if !ok {
+		v.err = fmt.Errorf("update() update must be a document or array")
+		return
+	}
+	updateValueCtx := secondArg.Value()
+	if updateValueCtx == nil {
+		v.err = fmt.Errorf("update() update must be a document or array")
+		return
+	}
+	switch uv := updateValueCtx.(type) {
+	case *mongodb.DocumentValueContext:
+		update, err := convertDocument(uv.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid update: %w", err)
+			return
+		}
+		v.operation.Update = update
+	case *mongodb.ArrayValueContext:
+		pipeline, err := convertArray(uv.Array())
+		if err != nil {
+			v.err = fmt.Errorf("invalid update pipeline: %w", err)
+			return
+		}
+		v.operation.Update = pipeline
+	default:
+		v.err = fmt.Errorf("update() update must be a document or array")
+		return
+	}
+
+	// Third argument: options (optional)
+	if len(allArgs) >= 3 {
+		thirdArg, ok := allArgs[2].(*mongodb.ArgumentContext)
+		if !ok {
+			return
+		}
+		optionsValueCtx := thirdArg.Value()
+		if optionsValueCtx == nil {
+			return
+		}
+		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
+		if !ok {
+			v.err = fmt.Errorf("update() options must be a document")
+			return
+		}
+		options, err := convertDocument(optionsDocValue.Document())
+		if err != nil {
+			v.err = fmt.Errorf("invalid options: %w", err)
+			return
+		}
+		for _, opt := range options {
+			switch opt.Key {
+			case "multi":
+				if val, ok := opt.Value.(bool); ok && val {
+					v.operation.OpType = types.OpUpdateMany
+				}
+			case "upsert":
+				if val, ok := opt.Value.(bool); ok {
+					v.operation.Upsert = &val
+				}
+			default:
+				v.err = &UnsupportedOptionError{
+					Method: "update()",
+					Option: opt.Key,
+				}
+				return
+			}
+		}
 	}
 }

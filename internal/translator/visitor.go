@@ -234,6 +234,15 @@ func (v *visitor) visitCollectionMethodCall(ctx mongodb.ICollectionMethodCallCon
 		v.operation.OpType = types.OpRenameCollection
 		v.extractRenameCollectionArgs(mc.RenameCollectionMethod())
 
+	// Deprecated methods (translated to modern equivalents)
+	case mc.CollectionInsertMethod() != nil:
+		v.extractDeprecatedInsertArgs(mc.CollectionInsertMethod())
+	case mc.CollectionCountMethod() != nil:
+		v.operation.OpType = types.OpCountDocuments
+		v.extractDeprecatedCountArgs(mc.CollectionCountMethod())
+	case mc.UpdateMethod() != nil:
+		v.extractDeprecatedUpdateArgs(mc.UpdateMethod())
+
 	// Collection information commands
 	case mc.StatsMethod() != nil:
 		v.operation.OpType = types.OpCollectionStats
@@ -281,6 +290,8 @@ func (v *visitor) visitCursorMethodCall(ctx mongodb.ICursorMethodCallContext) {
 		v.extractMax(mc.MaxMethod())
 	case mc.MinMethod() != nil:
 		v.extractMin(mc.MinMethod())
+	case mc.PrettyMethod() != nil:
+		// pretty() is a no-op — output is already formatted.
 	default:
 		methodName := extractMethodNameFromText(mc.GetText())
 		if methodName != "" {

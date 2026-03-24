@@ -76,3 +76,5 @@ require (
 )
 
 replace github.com/antlr4-go/antlr/v4 => github.com/bytebase/antlr/v4 v4.0.0-20240827034948-8c385f108920
+
+replace github.com/bytebase/parser => ../parser
