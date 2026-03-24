@@ -229,8 +229,24 @@ func TestInt32StringArg(t *testing.T) {
 		_, err = gc.Execute(ctx, dbName, `db.test.insertOne({val2: NumberInt("456")})`)
 		require.NoError(t, err)
 
+		result, err = gc.Execute(ctx, dbName, `db.test.findOne({val2: {$exists: true}})`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		doc, ok = result.Value[0].(bson.D)
+		require.True(t, ok)
+		val2 := getDocField(doc, "val2")
+		require.Equal(t, int32(456), val2)
+
 		// NumberLong("1774250313") — from real user report
 		_, err = gc.Execute(ctx, dbName, `db.test.insertOne({val3: NumberLong("1774250313")})`)
 		require.NoError(t, err)
+
+		result, err = gc.Execute(ctx, dbName, `db.test.findOne({val3: {$exists: true}})`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		doc, ok = result.Value[0].(bson.D)
+		require.True(t, ok)
+		val3 := getDocField(doc, "val3")
+		require.Equal(t, int64(1774250313), val3)
 	})
 }

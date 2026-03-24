@@ -2270,9 +2270,10 @@ func TestPrettyNoOp(t *testing.T) {
 
 		ctx := context.Background()
 		collection := db.Client.Database(dbName).Collection("users")
+		// Insert in reverse alphabetical order so sort assertions are meaningful.
 		_, err := collection.InsertMany(ctx, []any{
-			bson.M{"name": "alice", "age": 30},
 			bson.M{"name": "bob", "age": 25},
+			bson.M{"name": "alice", "age": 30},
 		})
 		require.NoError(t, err)
 
@@ -2283,7 +2284,7 @@ func TestPrettyNoOp(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, len(result.Value))
 
-		// pretty() chained after sort
+		// pretty() chained after sort — inserted bob first, sort should put alice first
 		result, err = gc.Execute(ctx, dbName, `db.users.find().sort({name: 1}).pretty()`)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(result.Value))
