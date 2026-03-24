@@ -2225,3 +2225,4 @@ func (v *visitor) extractCreateIndexesArgs(ctx mongodb.ICreateIndexesMethodConte
 		return
 	}
 }
+

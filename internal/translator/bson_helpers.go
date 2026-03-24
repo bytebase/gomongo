@@ -178,18 +178,22 @@ func convertLongHelper(ctx mongodb.ILongHelperContext) (int64, error) {
 	return strconv.ParseInt(numStr, 10, 64)
 }
 
-// convertInt32Helper converts Int32(123) or NumberInt(123) to int32.
+// convertInt32Helper converts Int32(123), Int32("123"), NumberInt(123), or NumberInt("123") to int32.
 func convertInt32Helper(ctx mongodb.IInt32HelperContext) (int32, error) {
 	helper, ok := ctx.(*mongodb.Int32HelperContext)
 	if !ok {
 		return 0, fmt.Errorf("invalid Int32 helper context")
 	}
 
-	if helper.NUMBER() == nil {
+	var numStr string
+	if helper.NUMBER() != nil {
+		numStr = helper.NUMBER().GetText()
+	} else if helper.StringLiteral() != nil {
+		numStr = unquoteString(helper.StringLiteral().GetText())
+	} else {
 		return 0, nil
 	}
 
-	numStr := helper.NUMBER().GetText()
 	i, err := strconv.ParseInt(numStr, 10, 32)
 	if err != nil {
 		return 0, err

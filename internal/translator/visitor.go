@@ -281,6 +281,8 @@ func (v *visitor) visitCursorMethodCall(ctx mongodb.ICursorMethodCallContext) {
 		v.extractMax(mc.MaxMethod())
 	case mc.MinMethod() != nil:
 		v.extractMin(mc.MinMethod())
+	case mc.PrettyMethod() != nil:
+		// pretty() is a no-op — output is already formatted.
 	default:
 		methodName := extractMethodNameFromText(mc.GetText())
 		if methodName != "" {

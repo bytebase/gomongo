@@ -2262,3 +2262,38 @@ func TestCursorMinMethod(t *testing.T) {
 		require.Equal(t, 2, len(result.Value))
 	})
 }
+
+func TestPrettyNoOp(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_pretty_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("users")
+		// Insert in reverse alphabetical order so sort assertions are meaningful.
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "bob", "age": 25},
+			bson.M{"name": "alice", "age": 30},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// pretty() should be a no-op cursor method
+		result, err := gc.Execute(ctx, dbName, `db.users.find().pretty()`)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(result.Value))
+
+		// pretty() chained after sort — inserted bob first, sort should put alice first
+		result, err = gc.Execute(ctx, dbName, `db.users.find().sort({name: 1}).pretty()`)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(result.Value))
+		rows := valuesToStrings(result.Value)
+		require.Contains(t, rows[0], `"alice"`)
+
+		// aggregate().pretty()
+		result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{$match: {name: "alice"}}]).pretty()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+	})
+}
