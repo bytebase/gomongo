@@ -1,6 +1,7 @@
 package translator
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/bytebase/omni/mongo"
@@ -11,7 +12,8 @@ import (
 func Parse(statement string) (*Operation, error) {
 	stmts, err := mongo.Parse(statement)
 	if err != nil {
-		if pe, ok := err.(*parser.ParseError); ok {
+		var pe *parser.ParseError
+		if errors.As(err, &pe) {
 			return nil, &ParseError{
 				Line:    pe.Line,
 				Column:  pe.Column,

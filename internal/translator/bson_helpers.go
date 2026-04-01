@@ -219,21 +219,33 @@ func convertTimestampDoc(doc *ast.Document) (bson.Timestamp, error) {
 		return bson.Timestamp{}, fmt.Errorf("invalid Timestamp document: %w", err)
 	}
 	var t, i uint32
+	var hasT, hasI bool
 	for _, elem := range d {
 		switch elem.Key {
 		case "t":
 			if v, ok := elem.Value.(int32); ok {
 				t = uint32(v)
+				hasT = true
 			} else if v, ok := elem.Value.(int64); ok {
 				t = uint32(v)
+				hasT = true
+			} else {
+				return bson.Timestamp{}, fmt.Errorf("timestamp t must be an integer")
 			}
 		case "i":
 			if v, ok := elem.Value.(int32); ok {
 				i = uint32(v)
+				hasI = true
 			} else if v, ok := elem.Value.(int64); ok {
 				i = uint32(v)
+				hasI = true
+			} else {
+				return bson.Timestamp{}, fmt.Errorf("timestamp i must be an integer")
 			}
 		}
+	}
+	if !hasT || !hasI {
+		return bson.Timestamp{}, fmt.Errorf("timestamp document must contain both 't' and 'i' fields")
 	}
 	return bson.Timestamp{T: t, I: i}, nil
 }

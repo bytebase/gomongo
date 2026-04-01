@@ -1106,7 +1106,8 @@ func extractRenameCollectionArgs(op *Operation, args []ast.Node) error {
 		if !ok {
 			return fmt.Errorf("renameCollection() dropTarget must be a boolean")
 		}
-		op.DropTarget = &boolNode.Value
+		dropTarget := boolNode.Value
+		op.DropTarget = &dropTarget
 	}
 
 	if len(args) > 2 {
