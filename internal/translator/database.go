@@ -3,233 +3,124 @@ package translator
 import (
 	"fmt"
 
-	"github.com/bytebase/parser/mongodb"
+	"github.com/bytebase/omni/mongo/ast"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-func (v *visitor) extractGetCollectionInfosArgs(ctx *mongodb.GetCollectionInfosContext) {
-	args := ctx.Arguments()
-	if args == nil {
-		return
+func extractGetCollectionInfosArgs(op *Operation, args []ast.Node) (*Operation, error) {
+	if len(args) == 0 {
+		return op, nil
 	}
 
-	argsCtx, ok := args.(*mongodb.ArgumentsContext)
-	if !ok {
-		return
-	}
-
-	allArgs := argsCtx.AllArgument()
-	if len(allArgs) == 0 {
-		return
-	}
-
-	// First argument is the filter (optional)
-	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
-	if !ok {
-		return
-	}
-
-	valueCtx := firstArg.Value()
-	if valueCtx == nil {
-		return
-	}
-
-	docValue, ok := valueCtx.(*mongodb.DocumentValueContext)
-	if !ok {
-		v.err = fmt.Errorf("getCollectionInfos() filter must be a document")
-		return
-	}
-
-	filter, err := convertDocument(docValue.Document())
+	// First argument: filter (optional)
+	filter, err := requireDocument(args, 0, "getCollectionInfos() filter")
 	if err != nil {
-		v.err = fmt.Errorf("invalid filter: %w", err)
-		return
+		return nil, err
 	}
-	v.operation.Filter = filter
+	op.Filter = filter
 
-	// Second argument is the options (optional)
-	if len(allArgs) >= 2 {
-		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
-		if !ok {
-			return
-		}
-
-		optionsValueCtx := secondArg.Value()
-		if optionsValueCtx == nil {
-			return
-		}
-
-		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
-		if !ok {
-			v.err = fmt.Errorf("getCollectionInfos() options must be a document")
-			return
-		}
-
-		optionsDoc, err := convertDocument(optionsDocValue.Document())
+	// Second argument: options (optional)
+	if len(args) >= 2 {
+		options, err := requireDocument(args, 1, "getCollectionInfos() options")
 		if err != nil {
-			v.err = fmt.Errorf("invalid options: %w", err)
-			return
+			return nil, err
 		}
-
-		for _, opt := range optionsDoc {
+		for _, opt := range options {
 			switch opt.Key {
 			case "nameOnly":
 				if val, ok := opt.Value.(bool); ok {
-					v.operation.NameOnly = &val
+					op.NameOnly = &val
 				} else {
-					v.err = fmt.Errorf("getCollectionInfos() nameOnly must be a boolean")
-					return
+					return nil, fmt.Errorf("getCollectionInfos() nameOnly must be a boolean")
 				}
 			case "authorizedCollections":
 				if val, ok := opt.Value.(bool); ok {
-					v.operation.AuthorizedCollections = &val
+					op.AuthorizedCollections = &val
 				} else {
-					v.err = fmt.Errorf("getCollectionInfos() authorizedCollections must be a boolean")
-					return
+					return nil, fmt.Errorf("getCollectionInfos() authorizedCollections must be a boolean")
 				}
 			default:
-				v.err = &UnsupportedOptionError{
+				return nil, &UnsupportedOptionError{
 					Method: "getCollectionInfos()",
 					Option: opt.Key,
 				}
-				return
 			}
 		}
 	}
 
-	if len(allArgs) > 2 {
-		v.err = fmt.Errorf("getCollectionInfos() takes at most 2 arguments")
-		return
+	if len(args) > 2 {
+		return nil, fmt.Errorf("getCollectionInfos() takes at most 2 arguments")
 	}
+	return op, nil
 }
 
-// extractCreateCollectionArgs extracts arguments from CreateCollectionContext.
-func (v *visitor) extractCreateCollectionArgs(ctx *mongodb.CreateCollectionContext) {
-	args := ctx.Arguments()
-	if args == nil {
-		v.err = fmt.Errorf("createCollection() requires a collection name")
-		return
-	}
-
-	argsCtx, ok := args.(*mongodb.ArgumentsContext)
-	if !ok {
-		v.err = fmt.Errorf("createCollection() requires a collection name")
-		return
-	}
-
-	allArgs := argsCtx.AllArgument()
-	if len(allArgs) == 0 {
-		v.err = fmt.Errorf("createCollection() requires a collection name")
-		return
+func extractCreateCollectionArgs(op *Operation, args []ast.Node) (*Operation, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("createCollection() requires a collection name")
 	}
 
 	// First argument: collection name (required)
-	firstArg, ok := allArgs[0].(*mongodb.ArgumentContext)
-	if !ok {
-		v.err = fmt.Errorf("createCollection() collection name must be a string")
-		return
+	name, err := requireString(args, 0, "createCollection() collection name")
+	if err != nil {
+		return nil, err
 	}
-
-	valueCtx := firstArg.Value()
-	if valueCtx == nil {
-		v.err = fmt.Errorf("createCollection() collection name must be a string")
-		return
-	}
-
-	literalValue, ok := valueCtx.(*mongodb.LiteralValueContext)
-	if !ok {
-		v.err = fmt.Errorf("createCollection() collection name must be a string")
-		return
-	}
-
-	stringLiteral, ok := literalValue.Literal().(*mongodb.StringLiteralValueContext)
-	if !ok {
-		v.err = fmt.Errorf("createCollection() collection name must be a string")
-		return
-	}
-
-	v.operation.Collection = unquoteString(stringLiteral.StringLiteral().GetText())
+	op.Collection = name
 
 	// Second argument: options (optional)
-	if len(allArgs) >= 2 {
-		secondArg, ok := allArgs[1].(*mongodb.ArgumentContext)
-		if !ok {
-			return
-		}
-
-		optionsValueCtx := secondArg.Value()
-		if optionsValueCtx == nil {
-			return
-		}
-
-		optionsDocValue, ok := optionsValueCtx.(*mongodb.DocumentValueContext)
-		if !ok {
-			v.err = fmt.Errorf("createCollection() options must be a document")
-			return
-		}
-
-		options, err := convertDocument(optionsDocValue.Document())
+	if len(args) >= 2 {
+		options, err := requireDocument(args, 1, "createCollection() options")
 		if err != nil {
-			v.err = fmt.Errorf("invalid options: %w", err)
-			return
+			return nil, err
 		}
-
 		for _, opt := range options {
 			switch opt.Key {
 			case "capped":
 				if val, ok := opt.Value.(bool); ok {
-					v.operation.Capped = &val
+					op.Capped = &val
 				} else {
-					v.err = fmt.Errorf("createCollection() capped must be a boolean")
-					return
+					return nil, fmt.Errorf("createCollection() capped must be a boolean")
 				}
 			case "size":
 				if val, ok := ToInt64(opt.Value); ok {
-					v.operation.CollectionSize = &val
+					op.CollectionSize = &val
 				} else {
-					v.err = fmt.Errorf("createCollection() size must be a number")
-					return
+					return nil, fmt.Errorf("createCollection() size must be a number")
 				}
 			case "max":
 				if val, ok := ToInt64(opt.Value); ok {
-					v.operation.CollectionMax = &val
+					op.CollectionMax = &val
 				} else {
-					v.err = fmt.Errorf("createCollection() max must be a number")
-					return
+					return nil, fmt.Errorf("createCollection() max must be a number")
 				}
 			case "validator":
 				if doc, ok := opt.Value.(bson.D); ok {
-					v.operation.Validator = doc
+					op.Validator = doc
 				} else {
-					v.err = fmt.Errorf("createCollection() validator must be a document")
-					return
+					return nil, fmt.Errorf("createCollection() validator must be a document")
 				}
 			case "validationLevel":
 				if val, ok := opt.Value.(string); ok {
-					v.operation.ValidationLevel = val
+					op.ValidationLevel = val
 				} else {
-					v.err = fmt.Errorf("createCollection() validationLevel must be a string")
-					return
+					return nil, fmt.Errorf("createCollection() validationLevel must be a string")
 				}
 			case "validationAction":
 				if val, ok := opt.Value.(string); ok {
-					v.operation.ValidationAction = val
+					op.ValidationAction = val
 				} else {
-					v.err = fmt.Errorf("createCollection() validationAction must be a string")
-					return
+					return nil, fmt.Errorf("createCollection() validationAction must be a string")
 				}
 			default:
-				v.err = &UnsupportedOptionError{
+				return nil, &UnsupportedOptionError{
 					Method: "createCollection()",
 					Option: opt.Key,
 				}
-				return
 			}
 		}
 	}
 
-	if len(allArgs) > 2 {
-		v.err = fmt.Errorf("createCollection() takes at most 2 arguments")
-		return
+	if len(args) > 2 {
+		return nil, fmt.Errorf("createCollection() takes at most 2 arguments")
 	}
+	return op, nil
 }
