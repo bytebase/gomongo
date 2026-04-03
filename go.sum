@@ -6,8 +6,6 @@ github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c h1:udKWzYgxTojEK
 github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/bytebase/omni v0.0.0-20260331035734-d4ee06cc4af7 h1:uFZlh3Ph6bzlSdeQtQ+OObuZeMB4hOnhtz0aVD8c5ao=
-github.com/bytebase/omni v0.0.0-20260331035734-d4ee06cc4af7/go.mod h1:7kUVQrivlkckALafCX5j4W3M95Cg9+Kw69ZukIHKXhQ=
 github.com/bytebase/omni v0.0.0-20260402100940-de2123e1bfb3 h1:8llu1EtFX2sjXmOOE0WTD/FtWP8j4+7qEpRrEz9gt/s=
 github.com/bytebase/omni v0.0.0-20260402100940-de2123e1bfb3/go.mod h1:7kUVQrivlkckALafCX5j4W3M95Cg9+Kw69ZukIHKXhQ=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
