@@ -253,10 +253,18 @@ func translateCursorMethod(op *Operation, cm ast.CursorMethod) error {
 	case "pretty":
 		return nil // no-op
 	case "count", "itcount", "size":
-		// Cursor terminals on a find cursor: count documents matching the
-		// accumulated filter, honoring skip/limit/hint. Aggregate cursors also
-		// expose itcount() but require pipeline rewriting ($count stage); not
-		// yet supported.
+		// mongosh's cursor.count() never iterates the cursor; it issues a
+		// separate count command server-side. We mirror that by retargeting
+		// the operation to CountDocuments with the accumulated
+		// filter+skip+limit+hint. Aggregate cursors also expose itcount() but
+		// require pipeline rewriting ($count stage); not yet supported.
+		if len(cm.Args) > 0 {
+			// mongosh historically accepted cursor.count(applySkipLimit), but
+			// the boolean is a no-op in modern drivers (skip/limit always
+			// apply). Reject rather than silently drop, since "no-op" is
+			// hard to debug.
+			return fmt.Errorf("%s() takes no arguments", cm.Method)
+		}
 		if op.OpType != types.OpFind {
 			return &UnsupportedOperationError{Operation: cm.Method + "()"}
 		}

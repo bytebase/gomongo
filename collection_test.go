@@ -2281,6 +2281,33 @@ func TestAggregateItcountUnsupported(t *testing.T) {
 
 		var unsupportedErr *gomongo.UnsupportedOperationError
 		require.ErrorAs(t, err, &unsupportedErr)
+		require.Equal(t, "itcount()", unsupportedErr.Operation)
+	})
+}
+
+// TestCursorCountRejectsArgs guards against mongosh's legacy
+// cursor.count(applySkipLimit) form silently dropping the boolean: the arg is
+// a no-op in modern drivers, and silently dropping it would make incorrect
+// caller assumptions hard to debug.
+func TestCursorCountRejectsArgs(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_cursor_count_args_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		gc := gomongo.NewClient(db.Client)
+
+		for _, stmt := range []string{
+			"db.users.find().count(true)",
+			"db.users.find().count(false)",
+			"db.users.find().itcount(true)",
+			"db.users.find().size(1)",
+		} {
+			_, err := gc.Execute(ctx, dbName, stmt)
+			require.Error(t, err, "expected %q to be rejected", stmt)
+			require.Contains(t, err.Error(), "takes no arguments")
+		}
 	})
 }
 
