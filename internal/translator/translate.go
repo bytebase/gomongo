@@ -89,6 +89,19 @@ func translateCollectionStatement(op *Operation, stmt *ast.CollectionStatement) 
 		if err := extractEstimatedDocumentCountArgs(op, stmt.Args); err != nil {
 			return nil, err
 		}
+	case "count":
+		// db.coll.count() is deprecated in mongosh in favor of countDocuments /
+		// estimatedDocumentCount. We honor both halves of that recommendation:
+		// zero-arg count() routes to estimatedDocumentCount (preserves the fast
+		// metadata path), and any-arg count() routes to countDocuments.
+		if len(stmt.Args) == 0 {
+			op.OpType = types.OpEstimatedDocumentCount
+		} else {
+			op.OpType = types.OpCountDocuments
+			if err := extractCountDocumentsArgs(op, stmt.Args); err != nil {
+				return nil, err
+			}
+		}
 	case "distinct":
 		op.OpType = types.OpDistinct
 		if err := extractDistinctArgs(op, stmt.Args); err != nil {
@@ -239,6 +252,16 @@ func translateCursorMethod(op *Operation, cm ast.CursorMethod) error {
 		return extractMin(op, cm.Args)
 	case "pretty":
 		return nil // no-op
+	case "count", "itcount", "size":
+		// Cursor terminals on a find cursor: count documents matching the
+		// accumulated filter, honoring skip/limit/hint. Aggregate cursors also
+		// expose itcount() but require pipeline rewriting ($count stage); not
+		// yet supported.
+		if op.OpType != types.OpFind {
+			return &UnsupportedOperationError{Operation: cm.Method + "()"}
+		}
+		op.OpType = types.OpCountDocuments
+		return nil
 	default:
 		return &UnsupportedOperationError{Operation: cm.Method + "()"}
 	}
