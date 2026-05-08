@@ -124,3 +124,18 @@ func extractCreateCollectionArgs(op *Operation, args []ast.Node) (*Operation, er
 	}
 	return op, nil
 }
+
+func extractRunCommandArgs(op *Operation, args []ast.Node) (*Operation, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("runCommand() takes exactly 1 argument")
+	}
+	command, err := requireDocument(args, 0, "runCommand() command")
+	if err != nil {
+		return nil, err
+	}
+	if len(command) == 0 {
+		return nil, fmt.Errorf("runCommand() command cannot be empty")
+	}
+	op.Command = command
+	return op, nil
+}

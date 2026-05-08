@@ -18,6 +18,9 @@ type Result struct {
 // Execute executes a parsed operation against MongoDB.
 func Execute(ctx context.Context, client *mongo.Client, database string, op *translator.Operation, statement string, maxRows *int64) (*Result, error) {
 	switch op.OpType {
+	case types.OpNoOp:
+		// Comment-only / whitespace-only input — return empty Result.
+		return &Result{Operation: types.OpNoOp}, nil
 	case types.OpFind:
 		return executeFind(ctx, client, database, op, maxRows)
 	case types.OpFindOne:
@@ -92,6 +95,8 @@ func Execute(ctx context.Context, client *mongo.Client, database string, op *tra
 		return executeHostInfo(ctx, client, database)
 	case types.OpListCommands:
 		return executeListCommands(ctx, client, database)
+	case types.OpRunCommand:
+		return executeRunCommand(ctx, client, database, op)
 	// Collection Information
 	case types.OpDataSize:
 		return executeDataSize(ctx, client, database, op)

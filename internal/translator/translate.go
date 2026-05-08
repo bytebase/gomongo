@@ -58,6 +58,9 @@ func translateDatabaseStatement(op *Operation, stmt *ast.DatabaseStatement) (*Op
 		op.OpType = types.OpHostInfo
 	case "listCommands":
 		op.OpType = types.OpListCommands
+	case "runCommand":
+		op.OpType = types.OpRunCommand
+		return extractRunCommandArgs(op, stmt.Args)
 	default:
 		return nil, &UnsupportedOperationError{Operation: stmt.Method + "()"}
 	}
@@ -231,6 +234,12 @@ func translateCollectionStatement(op *Operation, stmt *ast.CollectionStatement) 
 		}
 	}
 
+	// If the operation was tagged for explain (via a trailing .explain() or an
+	// aggregate {explain: true} option), rewrite it into an explain runCommand.
+	if err := applyExplainIfRequested(op); err != nil {
+		return nil, err
+	}
+
 	return op, nil
 }
 
@@ -250,8 +259,13 @@ func translateCursorMethod(op *Operation, cm ast.CursorMethod) error {
 		return extractMax(op, cm.Args)
 	case "min":
 		return extractMin(op, cm.Args)
-	case "pretty":
-		return nil // no-op
+	case "pretty", "toArray":
+		// pretty(): formatting hint, no-op (results are returned structured).
+		// toArray(): cursor terminator, no-op (gomongo materializes the
+		// cursor's results into Result.Value already).
+		return nil
+	case "explain":
+		return applyExplainCursor(op, cm.Args)
 	case "count", "itcount", "size":
 		// mongosh's cursor.count() never iterates the cursor; it issues a
 		// separate count command server-side. We mirror that by retargeting

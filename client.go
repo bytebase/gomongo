@@ -31,7 +31,8 @@ func NewClient(client *mongo.Client) *Client {
 //   - OpCreateIndexes: each element is string (index name)
 //   - OpDropIndex, OpDropIndexes, OpCreateCollection, OpDropDatabase, OpRenameCollection: single bson.D with {ok: 1}
 //   - OpDrop: single element of bool (true)
-//   - OpDbStats, OpCollectionStats, OpServerStatus, OpServerBuildInfo, OpHostInfo, OpListCommands, OpValidate: single bson.D (command result)
+//   - OpDbStats, OpCollectionStats, OpServerStatus, OpServerBuildInfo, OpHostInfo, OpListCommands, OpValidate, OpRunCommand: single bson.D (command result)
+//   - OpNoOp: empty Value (input was comment-only / whitespace-only)
 //   - OpDbVersion: single element of string (version)
 //   - OpDataSize, OpStorageSize, OpTotalIndexSize: single numeric value from collStats
 //   - OpTotalSize: single int64 (storageSize + totalIndexSize)

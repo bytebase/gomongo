@@ -827,3 +827,86 @@ func TestLatencyStats(t *testing.T) {
 		require.Contains(t, row, `"latencyStats"`)
 	})
 }
+
+func TestRunCommand(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_run_command_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		_, err := db.Client.Database(dbName).Collection("users").InsertMany(ctx, []any{
+			bson.M{"name": "alice"},
+			bson.M{"name": "bob"},
+			bson.M{"name": "carol"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// ping is the canonical "does runCommand work" probe
+		result, err := gc.Execute(ctx, dbName, `db.runCommand({ ping: 1 })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		require.Contains(t, valueToJSON(result.Value[0]), `"ok"`)
+
+		// Legacy "count" command form — the wild case from the gomongoFallback events
+		result, err = gc.Execute(ctx, dbName, `db.runCommand({ count: "users", query: {} })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		row := valueToJSON(result.Value[0])
+		require.Contains(t, row, `"n"`)
+		require.Contains(t, row, `"ok"`)
+
+		// Empty body is rejected at parse time
+		_, err = gc.Execute(ctx, dbName, `db.runCommand({})`)
+		require.Error(t, err)
+
+		// Wrong arity is rejected
+		_, err = gc.Execute(ctx, dbName, `db.runCommand({ ping: 1 }, { writeConcern: {} })`)
+		require.Error(t, err)
+	})
+}
+
+func TestCommentOnlyStatementIsNoOp(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_comment_noop_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		gc := gomongo.NewClient(db.Client)
+
+		// Pure JS line comment — mongosh evaluates this as nothing,
+		// gomongo should return an empty Result with no error.
+		result, err := gc.Execute(ctx, dbName, `// db.users.updateOne(...)`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Empty(t, result.Value)
+
+		// Multiple comment lines (the wild shape).
+		result, err = gc.Execute(ctx, dbName, "//   $gte: ISODate(\"2026-01-01T00:00:00Z\"),\n    //   $lt: ISODate(\"2026-02-01T00:00:00Z\")\n    // },")
+		require.NoError(t, err)
+		require.Empty(t, result.Value)
+
+		// Block comment.
+		result, err = gc.Execute(ctx, dbName, `/* nothing here */`)
+		require.NoError(t, err)
+		require.Empty(t, result.Value)
+
+		// Pure whitespace.
+		result, err = gc.Execute(ctx, dbName, "   \n\t  ")
+		require.NoError(t, err)
+		require.Empty(t, result.Value)
+
+		// Empty string.
+		result, err = gc.Execute(ctx, dbName, ``)
+		require.NoError(t, err)
+		require.Empty(t, result.Value)
+
+		// Comment + real statement: the real statement still wins.
+		_, err = db.Client.Database(dbName).Collection("users").InsertOne(ctx, bson.M{"name": "alice"})
+		require.NoError(t, err)
+		result, err = gc.Execute(ctx, dbName, "// preceding comment\ndb.users.find({})")
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+	})
+}
