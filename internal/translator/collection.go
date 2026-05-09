@@ -256,6 +256,15 @@ func extractAggregateArgs(op *Operation, args []ast.Node) error {
 				} else {
 					return fmt.Errorf("aggregate() maxTimeMS must be a number")
 				}
+			case "explain":
+				val, ok := opt.Value.(bool)
+				if !ok {
+					return fmt.Errorf("aggregate() explain must be a boolean")
+				}
+				if val {
+					verbosity := defaultExplainVerbosity
+					op.Explain = &verbosity
+				}
 			default:
 				return &UnsupportedOptionError{
 					Method: "aggregate()",

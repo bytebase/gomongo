@@ -63,4 +63,13 @@ type Operation struct {
 	ValidationLevel  string // createCollection validationLevel option
 	ValidationAction string // createCollection validationAction option
 	Validator        bson.D // createCollection validator option
+
+	// runCommand
+	Command bson.D // runCommand body
+
+	// explain — when non-nil, the operation runs as a server "explain" wrapper
+	// at this verbosity instead of executing for real. Set either by an
+	// explicit .explain([verbosity]) cursor terminator or by aggregate's
+	// {explain: true} option. Resolved into an OpRunCommand after parsing.
+	Explain *string
 }

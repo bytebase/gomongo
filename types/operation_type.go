@@ -6,6 +6,10 @@ type OperationType int
 
 const (
 	OpUnknown OperationType = iota
+	// OpNoOp represents an input that contains no executable statements
+	// (e.g., the entire input is a JS comment or whitespace). Executors
+	// return an empty Result for OpNoOp without contacting the server.
+	OpNoOp
 	OpFind
 	OpFindOne
 	OpAggregate
@@ -45,6 +49,7 @@ const (
 	OpDbVersion
 	OpHostInfo
 	OpListCommands
+	OpRunCommand
 	// Collection Information
 	OpDataSize
 	OpStorageSize

@@ -2,13 +2,18 @@ package translator
 
 import (
 	"errors"
-	"fmt"
 
+	"github.com/bytebase/gomongo/types"
 	"github.com/bytebase/omni/mongo"
 	"github.com/bytebase/omni/mongo/parser"
 )
 
 // Parse parses a MongoDB shell statement and returns the operation.
+//
+// Input that contains no executable statements (e.g., only comments or
+// whitespace) is treated as a no-op: Parse returns an Operation with
+// OpType = OpNoOp and no error, mirroring mongosh, where evaluating a
+// comment-only line is silently successful.
 func Parse(statement string) (*Operation, error) {
 	stmts, err := mongo.Parse(statement)
 	if err != nil {
@@ -30,5 +35,6 @@ func Parse(statement string) (*Operation, error) {
 		}
 	}
 
-	return nil, &ParseError{Message: fmt.Sprintf("empty statement: %s", statement)}
+	// Comment-only / whitespace-only input: no-op, no error.
+	return &Operation{OpType: types.OpNoOp}, nil
 }

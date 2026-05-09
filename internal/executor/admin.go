@@ -444,6 +444,18 @@ func executeListCommands(ctx context.Context, client *mongo.Client, database str
 	return &Result{Operation: types.OpListCommands, Value: []any{result}}, nil
 }
 
+// executeRunCommand executes a db.runCommand({...}) and returns the server response.
+// The command body is passed through to the server unchanged; gomongo does not
+// attempt to interpret or rewrite individual command names. This is the generic
+// escape hatch for commands that don't have a dedicated typed wrapper.
+func executeRunCommand(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
+	result, err := runCommand(ctx, client.Database(database), op.Command)
+	if err != nil {
+		return nil, fmt.Errorf("runCommand failed: %w", err)
+	}
+	return &Result{Operation: types.OpRunCommand, Value: []any{result}}, nil
+}
+
 // executeDataSize executes a db.collection.dataSize() command.
 func executeDataSize(ctx context.Context, client *mongo.Client, database string, op *translator.Operation) (*Result, error) {
 	stats, err := runCollStats(ctx, client, database, op.Collection)

@@ -2473,3 +2473,113 @@ func TestPrettyNoOp(t *testing.T) {
 		require.Equal(t, 1, len(result.Value))
 	})
 }
+
+func TestToArrayNoOp(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_toarray_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		collection := db.Client.Database(dbName).Collection("users")
+		_, err := collection.InsertMany(ctx, []any{
+			bson.M{"name": "bob", "age": 25},
+			bson.M{"name": "alice", "age": 30},
+			bson.M{"name": "carol", "age": 28},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// toArray() at the end of a find()
+		result, err := gc.Execute(ctx, dbName, `db.users.find().toArray()`)
+		require.NoError(t, err)
+		require.Equal(t, 3, len(result.Value))
+
+		// toArray() with a filter and projection — the most common shape from the wild
+		result, err = gc.Execute(ctx, dbName, `db.users.find({ name: "alice" }, { _id: 0, name: 1 }).toArray()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		rows := valuesToStrings(result.Value)
+		require.Contains(t, rows[0], `"alice"`)
+
+		// toArray() chained after limit()
+		result, err = gc.Execute(ctx, dbName, `db.users.find().limit(2).toArray()`)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(result.Value))
+
+		// aggregate().toArray()
+		result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{$match: {name: "alice"}}]).toArray()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+	})
+}
+
+func TestExplain(t *testing.T) {
+	testutil.RunOnMongoDBOnly(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_explain_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+		_, err := db.Client.Database(dbName).Collection("users").InsertMany(ctx, []any{
+			bson.M{"name": "alice", "age": 30, "city": "NYC"},
+			bson.M{"name": "bob", "age": 25, "city": "SF"},
+			bson.M{"name": "carol", "age": 28, "city": "NYC"},
+		})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		// find().explain() — default verbosity is queryPlanner
+		result, err := gc.Execute(ctx, dbName, `db.users.find({ city: "NYC" }).explain()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		require.Contains(t, valueToJSON(result.Value[0]), `"queryPlanner"`)
+
+		// find().explain("executionStats") — explicit verbosity
+		result, err = gc.Execute(ctx, dbName, `db.users.find({ name: "alice" }).explain("executionStats")`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		require.Contains(t, valueToJSON(result.Value[0]), `"executionStats"`)
+
+		// aggregate().explain()
+		result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { city: "NYC" } }]).explain()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		require.Contains(t, valueToJSON(result.Value[0]), `"queryPlanner"`)
+
+		// aggregate(pipeline, {explain: true}) — option form, the wild case
+		result, err = gc.Execute(ctx, dbName, `db.users.aggregate([{ $match: { city: "NYC" } }], { explain: true })`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+		require.Contains(t, valueToJSON(result.Value[0]), `"queryPlanner"`)
+
+		// count({…}).explain() — legacy count command form
+		result, err = gc.Execute(ctx, dbName, `db.users.count({ city: "NYC" }).explain()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+
+		// count().explain() — zero-arg routes to estimatedDocumentCount, still uses count command
+		result, err = gc.Execute(ctx, dbName, `db.users.count().explain()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+
+		// distinct().explain()
+		result, err = gc.Execute(ctx, dbName, `db.users.distinct("city").explain()`)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(result.Value))
+
+		// Negative cases
+		_, err = gc.Execute(ctx, dbName, `db.users.find().explain("bogus")`)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "verbosity")
+
+		_, err = gc.Execute(ctx, dbName, `db.users.find().explain("queryPlanner", "extra")`)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "at most 1 argument")
+
+		// explain on an unsupported operation type — write ops aren't covered yet
+		_, err = gc.Execute(ctx, dbName, `db.users.deleteOne({ name: "alice" }).explain()`)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "explain() is not supported")
+	})
+}
