@@ -1,9 +1,9 @@
 module github.com/bytebase/gomongo
 
-go 1.25.5
+go 1.25.7
 
 require (
-	github.com/bytebase/omni v0.0.0-20260402100940-de2123e1bfb3
+	github.com/bytebase/omni v0.0.0-20260509021101-01140a7b9722
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.41.0
