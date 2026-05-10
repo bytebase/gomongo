@@ -1,6 +1,6 @@
 module github.com/bytebase/gomongo
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/bytebase/omni v0.0.0-20260509021101-01140a7b9722
