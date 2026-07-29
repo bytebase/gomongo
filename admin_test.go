@@ -92,6 +92,51 @@ func TestCreateIndexWithOptions(t *testing.T) {
 	})
 }
 
+// TestCreateIndexArithmeticTTL pins the BYT-9950 statement: a TTL index whose
+// expireAfterSeconds is a constant arithmetic expression must be created with
+// the folded value.
+func TestCreateIndexArithmeticTTL(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_idx_ttl_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		collection := db.Client.Database(dbName).Collection("cs_customer_frequency")
+		_, err := collection.InsertOne(ctx, bson.M{"trans_date": 1})
+		require.NoError(t, err)
+
+		gc := gomongo.NewClient(db.Client)
+
+		result, err := gc.Execute(ctx, dbName, `db.cs_customer_frequency.createIndex(
+  { trans_date: 1 },
+  { expireAfterSeconds: 90 * 24 * 60 * 60, name: "cs_customer_frequency_idx2" }
+);`)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, 1, len(result.Value))
+		indexName, ok := result.Value[0].(string)
+		require.True(t, ok)
+		require.Equal(t, "cs_customer_frequency_idx2", indexName)
+
+		// Verify the index exists with the folded TTL value 7776000.
+		cursor, err := collection.Indexes().List(ctx)
+		require.NoError(t, err)
+		var indexes []bson.M
+		require.NoError(t, cursor.All(ctx, &indexes))
+		found := false
+		for _, idx := range indexes {
+			if idx["name"] == "cs_customer_frequency_idx2" {
+				found = true
+				ttl, ok := idx["expireAfterSeconds"]
+				require.True(t, ok, "expected expireAfterSeconds on index, got %v", idx)
+				require.EqualValues(t, 7776000, ttl)
+			}
+		}
+		require.True(t, found, "index cs_customer_frequency_idx2 not found in %v", indexes)
+	})
+}
+
 func TestDropIndex(t *testing.T) {
 	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
 		dbName := fmt.Sprintf("testdb_drop_idx_%s", db.Name)
