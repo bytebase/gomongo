@@ -92,6 +92,27 @@ func TestCreateIndexWithOptions(t *testing.T) {
 	})
 }
 
+// TestCreateIndexArithmeticTTL pins the BYT-9950 statement: arithmetic
+// expressions are not supported, and Execute must return a ParseError instead
+// of silently skipping the statement.
+func TestCreateIndexArithmeticTTL(t *testing.T) {
+	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
+		dbName := fmt.Sprintf("testdb_create_idx_ttl_%s", db.Name)
+		defer testutil.CleanupDatabase(t, db.Client, dbName)
+
+		ctx := context.Background()
+
+		gc := gomongo.NewClient(db.Client)
+
+		_, err := gc.Execute(ctx, dbName, `db.cs_customer_frequency.createIndex(
+  { trans_date: 1 },
+  { expireAfterSeconds: 90 * 24 * 60 * 60, name: "cs_customer_frequency_idx2" }
+);`)
+		var pe *gomongo.ParseError
+		require.ErrorAs(t, err, &pe)
+	})
+}
+
 func TestDropIndex(t *testing.T) {
 	testutil.RunOnAllDBs(t, func(t *testing.T, db testutil.TestDB) {
 		dbName := fmt.Sprintf("testdb_drop_idx_%s", db.Name)

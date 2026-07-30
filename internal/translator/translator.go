@@ -5,10 +5,13 @@ import (
 
 	"github.com/bytebase/gomongo/types"
 	"github.com/bytebase/omni/mongo"
+	"github.com/bytebase/omni/mongo/ast"
 	"github.com/bytebase/omni/mongo/parser"
 )
 
-// Parse parses a MongoDB shell statement and returns the operation.
+// Parse parses a single MongoDB shell statement and returns the operation.
+// The input must contain exactly one executable statement: parse errors and
+// extra statements are rejected rather than silently dropped.
 //
 // Input that contains no executable statements (e.g., only comments or
 // whitespace) is treated as a no-op: Parse returns an Operation with
@@ -28,13 +31,23 @@ func Parse(statement string) (*Operation, error) {
 		return nil, err
 	}
 
-	// Find the first non-empty statement.
+	var node ast.Node
 	for _, s := range stmts {
-		if !s.Empty() {
-			return translateNode(s.AST)
+		if s.Empty() {
+			continue
 		}
+		if node != nil {
+			return nil, &ParseError{
+				Line:    s.Start.Line,
+				Column:  s.Start.Column,
+				Message: "expected a single statement, got multiple",
+			}
+		}
+		node = s.AST
 	}
-
-	// Comment-only / whitespace-only input: no-op, no error.
-	return &Operation{OpType: types.OpNoOp}, nil
+	if node == nil {
+		// Comment-only / whitespace-only input: no-op, no error.
+		return &Operation{OpType: types.OpNoOp}, nil
+	}
+	return translateNode(node)
 }
