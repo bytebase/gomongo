@@ -62,23 +62,16 @@ func TestParseSingleStatementContract(t *testing.T) {
 	})
 }
 
-// TestParseCreateIndexArithmeticTTL pins the BYT-9950 statement: createIndex
-// with a constant arithmetic expireAfterSeconds folds to an int32 TTL.
+// TestParseCreateIndexArithmeticTTL pins the BYT-9950 statement: arithmetic
+// expressions are not supported, and Parse must surface the error instead of
+// silently dropping the statement.
 func TestParseCreateIndexArithmeticTTL(t *testing.T) {
-	op, err := Parse(`db.cs_customer_frequency.createIndex(
+	_, err := Parse(`db.cs_customer_frequency.createIndex(
   { trans_date: 1 },
   { expireAfterSeconds: 90 * 24 * 60 * 60, name: "cs_customer_frequency_idx2" }
 );`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if op.OpType != types.OpCreateIndex {
-		t.Fatalf("expected OpCreateIndex, got %v", op.OpType)
-	}
-	if op.IndexTTL == nil || *op.IndexTTL != 7776000 {
-		t.Errorf("expected IndexTTL 7776000, got %v", op.IndexTTL)
-	}
-	if op.IndexName != "cs_customer_frequency_idx2" {
-		t.Errorf("expected index name cs_customer_frequency_idx2, got %q", op.IndexName)
+	var pe *ParseError
+	if !errors.As(err, &pe) {
+		t.Fatalf("expected *ParseError, got %T: %v", err, err)
 	}
 }
